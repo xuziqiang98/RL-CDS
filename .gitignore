@@ -167,3 +167,6 @@ experiments/
 *.pdf
 *.png
 *.pkl
+
+# macOS
+.DS_Store
