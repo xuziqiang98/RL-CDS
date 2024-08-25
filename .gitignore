@@ -163,6 +163,7 @@ cython_debug/
 
 # experimental data
 experiments/
+checkpoints/
 *.pth
 *.pdf
 *.png

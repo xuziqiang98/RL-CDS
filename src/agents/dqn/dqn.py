@@ -16,6 +16,8 @@ import torch.optim as optim
 from src.agents.dqn.utils import ReplayBuffer, Logger, TestMetric, set_global_seed
 from src.envs.utils import ExtraAction
 
+from src.configs.common_configs import OtherConfig
+
 class DQN:
     """
     # Required parameters.
@@ -136,7 +138,8 @@ class DQN:
         seed=None
     ):
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = OtherConfig().device
 
         self.double_dqn = double_dqn
 
@@ -500,17 +503,40 @@ class DQN:
         所以这个代码，BINARY的时候把标记为0的顶点看成是可选的，SIGNED是把标记为1的顶点看成是可选的
         返回值是个标量，代表选哪个顶点
         '''
+        
         if is_training_ready and random.uniform(0, 1) >= self.epsilon: # 一开始epsilon=1
-            # Action that maximises Q function
+            # Action that maximises Q 
+            '''
+            计算CDS选择的顶点时，要保证选择的点不会破坏连通性
+            predict时怎么保证这一点呢？
+            '''
             action = self.predict(state)
         else:
             if self.acting_in_reversible_vertex_env: # 我们这里是True
                 # Random random vertex.
                 action = np.random.randint(0, self.env.action_space.n)
+                '''
+                不能真的随机选择一个顶点，要保证选择的点不会破坏连通性
+                1）值为0的顶点不能选，该点加入CDS后一定不连通
+                2）值为2但是为割点的顶点不能选，该点移出CDS后可能会破坏连通性
+                这里的state形状是(7+n, n)
+                state[0, :]是一个长度为n的向量，代表了每个顶点的标记
+                state[7:, :]是一个7xn的矩阵，代表了图的邻接矩阵
+                '''
+                x = mask = [state[0, :] != 0].nonzero()
+                # current_cds = [state[0, :] == 2].nonzero()
+                # induced_cds = self.env.get_subgraph(current_cds)
+                for idx in mask:
+                    if state[0, idx] == 2 and self.env.is_cut_vertex(idx):
+                        x = x[x != idx]
+                action = x[np.random.randint(0, len(x))].item()
+                
+                
             else:
                 # Flip random vertex from that hasn't yet been flipped.
                 x = (state[0, :] == self.allowed_action_state).nonzero() # x中包含所有满足条件的顶点
                 action = x[np.random.randint(0, len(x))].item() # 从所有满足条件的顶点里随机选一个顶点
+        
         return action
 
     def update_epsilon(self, timestep):
@@ -556,6 +582,9 @@ class DQN:
         qs = self.network(states) # network是MPNN，把states喂给MPNN
 
         if acting_in_reversible_vertex_env: # 每个顶点可以重复操作
+            '''
+            这里可以输出一个action list，然后返回Q值最大的不为0的顶点
+            '''
             if qs.dim() == 1: # 在这个例子里dim应该只等于1
                 actions = qs.argmax().item() 
             else:
