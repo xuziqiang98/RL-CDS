@@ -162,7 +162,7 @@ cython_debug/
 #.idea/
 
 # experimental data
-experiments/
+checkpoints/
 *.pth
 *.pdf
 *.png

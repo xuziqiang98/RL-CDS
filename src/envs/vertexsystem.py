@@ -33,6 +33,7 @@ class VertexSystemFactory(object):
             extra_action = ExtraAction.PASS,
             optimisation_target = OptimisationTarget.ENERGY,
             vertex_basis = VertexBasis.SIGNED,
+            # vertex_basis = VertexBasis.TRINARY,
             norm_rewards=False,
             memory_length=None,  # None means an infinite memory.
             horizon_length=None, # None means an infinite horizon.
@@ -81,7 +82,7 @@ class VertexSystemBase(ABC):
         def sample(self, n=1):
             '''
             从actions中随机选择n个动作
-            也就是说随机翻转n个点
+            也就是说随机选择n个点
             '''
             return np.random.choice(self.actions, n)
 
@@ -153,7 +154,7 @@ class VertexSystemBase(ABC):
         if extra_action != ExtraAction.NONE:
             self.n_actions+=1
 
-        self.action_space = self.action_space(self.n_actions)
+        self.action_space = self.action_space(self.n_actions) # 这里action_space是一个类
         self.observation_space = self.observation_space(self.n_vertices, len(self.observables))
 
         self.current_step = 0
@@ -282,8 +283,36 @@ class VertexSystemBase(ABC):
             if self.reversible_vertices: # reversible_vertices设为True
                 # For reversible vertices, initialise randomly to {+1,-1}.
                 # 第一行表示顶点的状态，这里相当于初始化了一个随机的解
-                state[0, :self.n_vertices] = 2 * np.random.randint(2, size=self.n_vertices) - 1 # 第一行的元素随机设为-1或者1
-            else:
+                # 第一行的元素随机设为-1或者1
+                # state[0, :self.n_vertices] = 2 * np.random.randint(2, size=self.n_vertices) - 1 
+                '''
+                初始化一个解
+                顶点可以被重复选择
+                此时顶点的取值是0，1，2
+                随机选择一个点，将其以及邻居设为2，表示这些点加入了CDS中
+                与这些点相邻的点取值设为1，表示这些点被控制了
+                剩下的点取值设为0，表示这些点还没有被控制
+                self.matrix是图的邻接矩阵
+                '''
+                # 选择一个顶点设为2
+                mask = np.zeros(self.n_vertices)
+                random_vertex = np.random.randint(self.n_vertices)
+                mask[random_vertex] = 2
+                
+                # 将邻居都设为2，保证CDS中的顶点都是连通的
+                for idx in range(self.n_vertices):
+                    if self.matrix[random_vertex, idx] == 1:
+                        mask[idx] = 2
+                        
+                state[0, :self.n_vertices] = mask
+                
+                for i in range(self.n_vertices):
+                    if mask[i] == 2:
+                        # state[0, i] = 2
+                        for j in range(self.n_vertices):
+                            if self.matrix[i, j] == 1 and state[0, j] == 0:
+                                state[0, j] = 1
+            else: # 顶点不能重复选择
                 # For irreversible vertices, initialise all to +1 (i.e. allowed to be flipped).
                 state[0, :self.n_vertices] = 1
                 '''
@@ -304,11 +333,12 @@ class VertexSystemBase(ABC):
                 immeditate_rewards_avaialable = self.get_immeditate_rewards_avaialable(vertices=state[0, :self.n_vertices])
                 # 先计算有几个<=0的值，再得到>0的正值个数的比值
                 # 将第五行的元素都设为这个比值
+                # 表示有多少个可以使得奖励增加的顶点占总顶点数的比值
                 state[idx, :self.n_vertices] = 1 - np.sum(immeditate_rewards_avaialable <= 0) / self.n_vertices
 
         return state
 
-    def _get_vertices(self, basis=VertexBasis.SIGNED):
+    def _get_vertices(self, basis=VertexBasis.TRINARY):
         '''
         unbiased时这里basis=VertexBasis.SIGNED
         返回的vertices就是顶点的向量
@@ -317,13 +347,13 @@ class VertexSystemBase(ABC):
         '''
         先假设这里只会有VertexBasis.TRINARY
         '''
-        if basis == VertexBasis.SIGNED:
-            pass
-        elif basis == VertexSystemBiased:
-            # convert {1,-1} --> {0,1}
-            vertices[0, :] = (1 - vertices[0, :]) / 2
-        else:
-            raise NotImplementedError("Unrecognised VertexBasis")
+        # if basis == VertexBasis.SIGNED:
+        #     pass
+        # elif basis == VertexSystemBiased:
+        #     # convert {1,-1} --> {0,1}
+        #     vertices[0, :] = (1 - vertices[0, :]) / 2
+        # else:
+        #     raise NotImplementedError("Unrecognised VertexBasis")
 
         return vertices
 
@@ -404,7 +434,8 @@ class VertexSystemBase(ABC):
         # 1. Performs the action and calculates the score change. #
         ############################################################
 
-        if action==self.n_vertices:
+        # ExtraAction.None, action=n时表示不做任何操作
+        if action==self.n_vertices: 
             if self.extra_action == ExtraAction.PASS:
                 delta_score = 0
             if self.extra_action == ExtraAction.RANDOMISE:
@@ -420,7 +451,7 @@ class VertexSystemBase(ABC):
             # 将new_state[0, action]这个位置的值取反
             # 也就是1变成-1，或者-1变成1
             # 但是如果值为0，取反还是0，等于没做
-            new_state[0,action] = -self.state[0,action]
+            # new_state[0,action] = -self.state[0,action]
             '''
             我们这里设的是不能重复选择，所以说action一定是个不为2的点
             new_state[0,action]应设为2，表示当前的点被控制了
@@ -434,11 +465,45 @@ class VertexSystemBase(ABC):
             # 用np.where实现
             # new_state[0,:self.n_vertices] = np.where(self.state[0,:self.n_vertices] == 0, self.matrix[action], self.state[0,:self.n_vertices])
             # new_state[0,action] = 2
-
+            '''
+            假设顶点可以重复被选择
+            1）选择的顶点是2
+                将这个顶点赋为0，不能破坏CDS的连通性，这点由act()函数保证
+                检查所有的邻居，如果邻居不与另一个赋为2的顶点相邻，那么将其赋为0
+            2）选择的顶点是1
+                将这个顶点赋为2，由于该顶点被邻居控制，加入CDS不会破坏连通性
+                检查所有邻居，如果邻居值为0，那么将其赋为1
+            3）选择的顶点是0
+                不应该出现这种情况，如果赋为0的点加入CDS，那么新的CDS一定不连通
+            '''
+            if self.state[0, action] == 2:
+                mask = self.state[0, :self.n_vertices]
+                mask[action] = 0
+                for i in range(self.n_vertices):
+                    # 邻居i为1，检查其是否与赋为2的顶点相邻
+                    if self.matrix[action, i] == 1:
+                        # 顶点i的所有邻居都没有加入CDS
+                        if all(self.state[j] < 2 for j in range(self.n_vertices) if self.matrix[i,j] == 1):
+                            mask[i] = 0
+                new_state[0, :self.n_vertices] = mask
+            elif self.state[0, action] == 1:
+                mask = self.state[0, :self.n_vertices]
+                mask[action] = 2
+                for idx in range(self.n_vertices):
+                    if self.matrix[action, idx] == 1 and self.state[0, idx] == 0:
+                        mask[idx] = 1
+                new_state[0, :self.n_vertices] = mask
+            else:
+                raise ValueError("The selected vertex should be 1 or 2")
+            
             if self.gg.biased:
                 delta_score = self._calculate_score_change(new_state[0,:self.n_vertices], self.matrix, self.bias, action)
             else:
-                delta_score = self._calculate_score_change(new_state[0,:self.n_vertices], self.matrix, action)
+                # delta_score = self._calculate_score_change(new_state[0,:self.n_vertices], self.matrix, action)
+                '''
+                传旧的顶点状态和当前选择的顶点
+                '''
+                delta_score = self._calculate_score_change(self.state[0,:self.n_vertices], self.matrix, action)
             self.score += delta_score # 更新score，就知道了选择action后的分数
 
         #############################################################################################
@@ -626,6 +691,13 @@ class VertexSystemBase(ABC):
                 return (0,1)
             elif self.vertex_basis == VertexBasis.SIGNED:
                 return (1,-1)
+            elif self.vertex_basis == VertexBasis.TRINARY:
+                pass
+            '''
+            1) 值为2且不为割点的点可以被选择
+            2）值为1的点可以被选择
+            3）值为0的点不能被选择
+            '''
         else:
             # If MDP is irreversible, only return the state of vertices that haven't been flipped.
             if self.vertex_basis==VertexBasis.BINARY:
@@ -634,7 +706,7 @@ class VertexSystemBase(ABC):
                 return 1
             elif self.vertex_basis == VertexBasis.TRINARY and self.current_step == 0:
                 '''
-                # 初始化时0是可以选择的
+                初始化时0是可以选择的
                 '''
                 return 0
             elif self.vertex_basis == VertexBasis.TRINARY and self.current_step > 0:
@@ -656,6 +728,9 @@ class VertexSystemBase(ABC):
         return score
 
     def _calculate_score_change(self, new_vertices, matrix, action):
+        '''
+        计算CDS时new_vertices传进来的是旧的顶点的状态
+        '''
         if self.optimisation_target==OptimisationTarget.CDS:
             delta_score = self._calculate_cds_change(new_vertices, matrix, action)
         elif self.optimisation_target == OptimisationTarget.ENERGY:
@@ -712,6 +787,51 @@ class VertexSystemBase(ABC):
     @abstractmethod
     def _calculate_cds_change(self, new_vertices, matrix, action):
         raise NotImplementedError
+    
+    def get_subgraph(self, vertices):
+        '''
+        返回一个子图，子图的顶点是CDS中的顶点
+        '''
+        n = len(vertices)
+        subgraph_matrix = np.zeros((n, n), dtype=int)
+        for i in range(n):
+            for j in range(n):
+                subgraph_matrix[i][j] = self.matrix[vertices[i]][vertices[j]]
+        return subgraph_matrix
+    
+    def is_cut_vertex(self, vertex):
+        '''
+        判断一个点是否是割点
+        '''
+        current_cds = [self.state[0, :] == 2].nonzero()
+        induced_cds = self.get_subgraph(current_cds)
+        
+        n = len(induced_cds)
+    
+        # 创建一个邻接矩阵副本，并删除指定的顶点
+        submatrix = np.delete(induced_cds, vertex, axis=0)
+        submatrix = np.delete(submatrix, vertex, axis=1)
+        
+        # 创建一个已访问顶点的数组
+        visited = [False] * (n - 1)
+        
+        # 找到第一个未被删除的顶点并进行DFS遍历
+        for start in range(n - 1):
+            if not visited[start]:
+                break
+        
+        def dfs(v):
+            visited[v] = True
+            for u in range(n - 1):
+                if submatrix[v][u] == 1 and not visited[u]:
+                    dfs(u)
+        
+        # 从start开始进行深度优先搜索
+        dfs(start)
+        
+        # 如果有未访问的顶点，说明删除该顶点导致图不连通
+        return not all(visited)
+        
 
 ##########
 # Classes for implementing the calculation methods with/without biases.
@@ -740,11 +860,11 @@ class VertexSystemUnbiased(VertexSystemBase):
         else:
             vertices = self._format_vertices_to_signed(vertices)
 
-        return (1/4) * np.sum( np.multiply( self.matrix, 1 - np.outer(vertices, vertices) ) )
+        # return (1/4) * np.sum( np.multiply( self.matrix, 1 - np.outer(vertices, vertices) ) )
         '''
         标为2的顶点的个数就是连通控制数
         '''
-        # return np.sum(vertices == 2)
+        return np.sum(vertices == 2)
 
     def get_best_cds(self):
         if self.optimisation_target==OptimisationTarget.CDS:
@@ -784,11 +904,17 @@ class VertexSystemUnbiased(VertexSystemBase):
         返回CDS变化的值
         '''
         # return -1 * new_vertices[action] * matmul(new_vertices.T, matrix[:, action])
-        return -1 * new_vertices[action] * (new_vertices.T @ matrix[:, action])
+        # return -1 * new_vertices[action] * (new_vertices.T @ matrix[:, action])
         '''
         如果顶点不能重复选择的话，这里是不是只会变大？
         '''
         # return 1
+        '''
+        action是一个顶点的索引，其顶点的取值是1或者2
+        值为2的顶点选择后变成0
+        值为1的顶点选择后变成2
+        '''
+        return 1 if new_vertices[action] == 1 else -1
 
     @staticmethod
     @jit(float64(float64[:],float64[:,:]), nopython=True)
@@ -827,7 +953,7 @@ class VertexSystemUnbiased(VertexSystemBase):
         返回的标量是每一个xi在S中的邻居之和，所以有些顶点应该会被重复计算
         为什么不直接把S中的顶点个数当作奖励呢？
         '''
-        return vertices * matmul(matrix, vertices) # matrix和vertices相乘得到一个向量
+        # return vertices * matmul(matrix, vertices) # matrix和vertices相乘得到一个向量
         '''
         这里返回的是一个向量而不是标量
         每一个元素都表示选择这个顶点后立刻能得到的奖励
@@ -840,6 +966,20 @@ class VertexSystemUnbiased(VertexSystemBase):
         #     elif val == 0:
         #         rew[idx] = 1
         # return rew.astype('float64')
+        '''
+        值为0的顶点：不应该选，给一个较大的负值
+        值为1的顶点：选择后加入控制集
+        值为2的顶点：如果是割点不应该选，否则选择后移出控制集
+        '''
+        rew = np.zeros(len(vertices))
+        for idx, val in enumerate(vertices):
+            if val == 0:
+                rew[idx] = -10000
+            elif val == 1:
+                rew[idx] = 1
+            elif val == 2:
+                rew[idx] = -10000 if super.is_cut_vertex(idx) else -1
+        return rew.astype('float64')
 
 class VertexSystemBiased(VertexSystemBase):
 

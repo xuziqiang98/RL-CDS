@@ -44,8 +44,8 @@ def run(save_loc="BA_20vertex/eco"):
                 'reward_signal':RewardSignal.BLS, # 宽度学习系统
                 'extra_action':ExtraAction.NONE, # ExtraAction设为NONE
                 'optimisation_target':OptimisationTarget.CDS,
-                'vertex_basis':VertexBasis.BINARY, # vertex取0或1
-                # 'vertex_basis':VertexBasis.TRINARY, 
+                # 'vertex_basis':VertexBasis.BINARY, # vertex取0或1
+                'vertex_basis':VertexBasis.TRINARY, # vertex取0, 1, 2
                 'norm_rewards':True, # 使得reward不超过1
                 'memory_length':None,
                 'horizon_length':None,
@@ -162,6 +162,7 @@ def run(save_loc="BA_20vertex/eco"):
 
                 adam_epsilon=1e-8,
                 logging=False,
+                # logging=True,
                 loss="mse", # 损失函数
 
                 save_network_frequency=100000, # 每100000次保存一次网络

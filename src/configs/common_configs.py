@@ -9,10 +9,10 @@ from src.configs.config_base import ConfigBase
 class PathConfig(ConfigBase):
     root = Path(__file__).resolve().parents[2]
     src = root / 'src'
-    experiments = root / 'experiments'
+    checkpoints = root / 'checkpoints'
     scripts = root / 'scripts'
     tests = root / 'tests'
-    logs = experiments / 'logs'
+    logs = checkpoints / 'logs'
 
     def __post_init__(self) -> None:
         for path in vars(self).values():
@@ -31,5 +31,7 @@ class OtherConfig(ConfigBase):
         if self.device == 'default':
             if torch.cuda.is_available():
                 self.device = 'cuda'
+            elif torch.backends.mps.is_available():
+                self.device = 'mps'
             else:
                 self.device = 'cpu'  
