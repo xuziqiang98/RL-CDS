@@ -484,12 +484,13 @@ class VertexSystemBase(ABC):
             '''
             if self.state[0, action] == 2:
                 mask = self.state[0, :self.n_vertices].copy()
+                # print(f'mask: {mask}')
                 mask[action] = 0
                 for i in range(self.n_vertices):
                     # 邻居i为1，检查其是否与赋为2的顶点相邻
                     if self.matrix[action, i] == 1 and self.state[0, i] == 1:
                         # 顶点i的所有邻居都没有加入CDS
-                        if all(self.state[j] < 2 for j in range(self.n_vertices) if self.matrix[i,j] == 1):
+                        if all(mask[j] < 2 for j in range(self.n_vertices) if self.matrix[i,j] == 1):
                             mask[i] = 0
                 # 检查action这个顶点是否与2相连
                 for i in range(self.n_vertices):
@@ -504,7 +505,16 @@ class VertexSystemBase(ABC):
                         mask[idx] = 1
                 new_state[0, :self.n_vertices] = mask
             else:
-                raise ValueError("The selected vertex should be 1 or 2")
+                # raise ValueError("The selected vertex should be 1 or 2")
+                '''
+                如果顶点都为0，随机选择一个点加入CDS中
+                '''
+                mask = self.state[0, :self.n_vertices].copy()
+                mask[action] = 2
+                for idx in range(self.n_vertices):
+                    if self.matrix[action, idx] == 1 and self.state[0, idx] == 0:
+                        mask[idx] = 1
+                new_state[0, :self.n_vertices] = mask
             
             if self.gg.biased:
                 delta_score = self._calculate_score_change(new_state[0,:self.n_vertices], self.matrix, self.bias, action)
@@ -834,9 +844,15 @@ class VertexSystemBase(ABC):
         visited = [False] * (n - 1)
         
         # 找到第一个未被删除的顶点并进行DFS遍历
+        # for start in range(n - 1):
+        #     if not visited[start]:
+        #         break
         for start in range(n - 1):
-            if not visited[start]:
+            if any(submatrix[start, :]):
                 break
+        else:
+            # 如果图为空（所有顶点都孤立），直接返回 False
+            return False
         
         def dfs(v):
             visited[v] = True
@@ -974,7 +990,7 @@ class VertexSystemUnbiased(VertexSystemBase):
 
     @staticmethod
     @jit(float64[:](float64[:],float64[:,:]), nopython=True)
-    def _get_immeditate_cds_avaialable_jit(self, vertices, matrix):
+    def _get_immeditate_cds_avaialable_jit(vertices, matrix):
         '''
         假设vertex加入了S标为1，否则为-1
         matmul(matrix, vertices)得到一个列向量，其中每一个元素表示该顶点有几个邻居在S中
@@ -1008,7 +1024,8 @@ class VertexSystemUnbiased(VertexSystemBase):
             elif val == 1:
                 rew[idx] = 1
             elif val == 2:
-                rew[idx] = -10000 if self.is_cut_vertex(idx) else -1
+                # rew[idx] = -10000 if is_cut_vertex(idx) else -1
+                rew[idx] = -1
         return rew.astype('float64')
 
 # class VertexSystemBiased(VertexSystemBase):

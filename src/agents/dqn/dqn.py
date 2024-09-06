@@ -533,17 +533,41 @@ class DQN:
                 '''
                 # nonzero()函数用于获取数组中非零元素的索引
                 # x = mask = [state[0, :] != 0].nonzero()
-                mask = [i for i, val in enumerate(state) if val != 0]
+                # mask = [i for i, val in enumerate(state) if val != 0]
+                
+                # mask = torch.nonzero(state != 0).squeeze().tolist()
+                # x = mask[:]
+                current_vertex_state = state[0, :].tolist()
+                mask = mask = [i for i, val in enumerate(current_vertex_state) if val != 0]
                 x = mask[:]
                 # current_cds = [state[0, :] == 2].nonzero()
                 # induced_cds = self.env.get_subgraph(current_cds)
+                
+                # print(f'state形状：{state.shape}')
+                # torch.Size([27, 20])
+                # print(f'state[0, :]：{state[0, :]}')
+                # current_state = state[0, :].tolist()
+                # print(f'current_state：{current_state}')
+                # print(f'mask：{mask}')
                 for idx in mask:
-                    if state[0, idx] == 2 and self.env.is_cut_vertex(idx):
+                    # if state[0, idx].item() == 2 and self.env.is_cut_vertex(idx):
+                    if current_vertex_state[idx] == 2 and self.env.is_cut_vertex(idx):
                         # x = x[x != idx]
                         x.remove(idx)
                 # action = x[np.random.randint(0, len(x))].item()
-                action = random.choice(x)
-                
+                if x:
+                    action = random.choice(x)
+                else:
+                    # 如果没有点可以选择，那么就随机选择一个点
+                    '''
+                    这里存在一个问题，如果x为空，那么action只能选择值为0的点
+                    虽然这会使得CDS只有一个点，看起来似乎也是正确的
+                    但是由于一开始初始化的解可以被选择的点大于等于1+\delta(G)
+                    出现x为空的情况说明模型倾向于使得CDS的大小最小
+                    但是这样遗漏了一个约束，那就是CDS要控制图中其他的顶点
+                    在图没有被控制的情况下，应该要使得模型倾向于控制图
+                    '''
+                    action = np.random.randint(0, self.env.action_space.n)
                 
             else:
                 # Flip random vertex from that hasn't yet been flipped.
