@@ -5,7 +5,7 @@ from pathlib import Path
 # import torch
 import random
 # import numpy as np
-
+import matplotlib.pyplot as plt
 
 import os
 import pickle
@@ -476,3 +476,35 @@ def mk_dir(export_dir, quite=False):
                 pass
     else:
         print('dir already exists: ', export_dir)
+        
+###################################
+# draw graph
+###################################
+
+def draw_graph(adj, state = None) -> None:
+    '''
+    args:
+        adj: the adjacent matrix of a graph
+        state: the state of vertices
+    
+    输入邻接矩阵和state，画出这个图，并在图中标出CDS和被控制的顶点
+    值为2的顶点在CDS中，被着为红色
+    值为1的顶点被CDS控制，被着为粉色
+    值为0的顶点没被控制，被着为蓝色
+    '''
+    if isinstance(adj, np.ndarray):
+        n = adj.shape[0]
+    else:
+        raise NotImplementedError("Adjacent matrix must be ndarray!")
+    
+    G = nx.from_numpy_array(adj)
+    if state is None:
+        nx.draw(G, with_labels = True)
+        plt.show()
+    else:
+        if n != len(state):
+            raise ValueError("Adjacent matrix and CDS must be from the same graph!")
+        
+        colors = ['red' if x == 2 else 'pink' if x == 1 else 'blue' for x in state]
+        nx.draw(G, with_labels = True, node_color = colors)
+        plt.show()

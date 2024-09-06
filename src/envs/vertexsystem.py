@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from collections import namedtuple
 from operator import matmul
 
+import warnings
 import numpy as np
 import torch.multiprocessing as mp
-from numba import jit, float64, int64
+from numba import jit, float64, int64, NumbaPerformanceWarning
 
 from src.envs.utils import (EdgeType,
                             RewardSignal,
@@ -19,6 +20,9 @@ from src.envs.utils import (EdgeType,
 
 # A container for get_result function below. Works just like tuple, but prettier.
 ActionResult = namedtuple("action_result", ("snapshot","observation","reward","is_done","info"))
+
+# 忽略 NumbaPerformanceWarning 警告
+warnings.simplefilter('ignore', category=NumbaPerformanceWarning)
 
 class VertexSystemFactory(object):
     '''
@@ -357,53 +361,53 @@ class VertexSystemBase(ABC):
 
         return vertices
 
-    def calculate_best_energy(self):
-        if self.n_vertices <= 10:
-            # Generally, for small systems the time taken to start multiple processes is not worth it.
-            res = self.calculate_best_brute()
+    # def calculate_best_energy(self):
+    #     if self.n_vertices <= 10:
+    #         # Generally, for small systems the time taken to start multiple processes is not worth it.
+    #         res = self.calculate_best_brute()
 
-        else:
-            # Start up processing pool
-            n_cpu = int(mp.cpu_count()) / 2
+    #     else:
+    #         # Start up processing pool
+    #         n_cpu = int(mp.cpu_count()) / 2
 
-            pool = mp.Pool(mp.cpu_count())
+    #         pool = mp.Pool(mp.cpu_count())
 
-            # Split up state trials across the number of cpus
-            iMax = 2 ** (self.n_vertices)
-            args = np.round(np.linspace(0, np.ceil(iMax / n_cpu) * n_cpu, n_cpu + 1))
-            arg_pairs = [list(args) for args in zip(args, args[1:])]
+    #         # Split up state trials across the number of cpus
+    #         iMax = 2 ** (self.n_vertices)
+    #         args = np.round(np.linspace(0, np.ceil(iMax / n_cpu) * n_cpu, n_cpu + 1))
+    #         arg_pairs = [list(args) for args in zip(args, args[1:])]
 
-            # Try all the states.
-            #             res = pool.starmap(self._calc_over_range, arg_pairs)
-            try:
-                res = pool.starmap(self._calc_over_range, arg_pairs)
-                # Return the best solution,
-                idx_best = np.argmin([e for e, s in res])
-                res = res[idx_best]
-            except Exception as e:
-                # Falling back to single-thread implementation.
-                # res = self.calculate_best_brute()
-                res = self._calc_over_range(0, 2 ** (self.n_vertices))
-            finally:
-                # No matter what happens, make sure we tidy up after outselves.
-                pool.close()
+    #         # Try all the states.
+    #         #             res = pool.starmap(self._calc_over_range, arg_pairs)
+    #         try:
+    #             res = pool.starmap(self._calc_over_range, arg_pairs)
+    #             # Return the best solution,
+    #             idx_best = np.argmin([e for e, s in res])
+    #             res = res[idx_best]
+    #         except Exception as e:
+    #             # Falling back to single-thread implementation.
+    #             # res = self.calculate_best_brute()
+    #             res = self._calc_over_range(0, 2 ** (self.n_vertices))
+    #         finally:
+    #             # No matter what happens, make sure we tidy up after outselves.
+    #             pool.close()
 
-            if self.vertex_basis == VertexBasis.BINARY:
-                # convert {1,-1} --> {0,1}
-                best_score, best_vertices = res
-                best_vertices = (1 - best_vertices) / 2
-                res = best_score, best_vertices
+    #         if self.vertex_basis == VertexBasis.BINARY:
+    #             # convert {1,-1} --> {0,1}
+    #             best_score, best_vertices = res
+    #             best_vertices = (1 - best_vertices) / 2
+    #             res = best_score, best_vertices
 
-            if self.optimisation_target == OptimisationTarget.CDS:
-                best_energy, best_vertices = res
-                best_cds = self.calculate_cds(best_vertices)
-                res = best_cds, best_vertices
-            elif self.optimisation_target == OptimisationTarget.ENERGY:
-                pass
-            else:
-                raise NotImplementedError()
+    #         if self.optimisation_target == OptimisationTarget.CDS:
+    #             best_energy, best_vertices = res
+    #             best_cds = self.calculate_cds(best_vertices)
+    #             res = best_cds, best_vertices
+    #         elif self.optimisation_target == OptimisationTarget.ENERGY:
+    #             pass
+    #         else:
+    #             raise NotImplementedError()
 
-        return res
+    #     return res
 
     def seed(self, seed):
         return self.seed
@@ -414,7 +418,9 @@ class VertexSystemBase(ABC):
 
     def step(self, action):
         '''
-        action是当前要选择的顶点
+        args:
+            action: 当前选择的顶点
+            
         返回一个四元组，表示执行action后的状态、奖励、完成标志和_
         只有一个episode完成done才为True
         '''
@@ -477,17 +483,21 @@ class VertexSystemBase(ABC):
                 不应该出现这种情况，如果赋为0的点加入CDS，那么新的CDS一定不连通
             '''
             if self.state[0, action] == 2:
-                mask = self.state[0, :self.n_vertices]
+                mask = self.state[0, :self.n_vertices].copy()
                 mask[action] = 0
                 for i in range(self.n_vertices):
                     # 邻居i为1，检查其是否与赋为2的顶点相邻
-                    if self.matrix[action, i] == 1:
+                    if self.matrix[action, i] == 1 and self.state[0, i] == 1:
                         # 顶点i的所有邻居都没有加入CDS
                         if all(self.state[j] < 2 for j in range(self.n_vertices) if self.matrix[i,j] == 1):
                             mask[i] = 0
+                # 检查action这个顶点是否与2相连
+                for i in range(self.n_vertices):
+                    if self.matrix[action, i] == 1 and mask[i] == 2:
+                        mask[action] = 1
                 new_state[0, :self.n_vertices] = mask
             elif self.state[0, action] == 1:
-                mask = self.state[0, :self.n_vertices]
+                mask = self.state[0, :self.n_vertices].copy()
                 mask[action] = 2
                 for idx in range(self.n_vertices):
                     if self.matrix[action, idx] == 1 and self.state[0, idx] == 0:
@@ -788,7 +798,7 @@ class VertexSystemBase(ABC):
     def _calculate_cds_change(self, new_vertices, matrix, action):
         raise NotImplementedError
     
-    def get_subgraph(self, vertices):
+    def get_subgraph(self, vertices: list) -> np.ndarray:
         '''
         返回一个子图，子图的顶点是CDS中的顶点
         '''
@@ -796,21 +806,29 @@ class VertexSystemBase(ABC):
         subgraph_matrix = np.zeros((n, n), dtype=int)
         for i in range(n):
             for j in range(n):
-                subgraph_matrix[i][j] = self.matrix[vertices[i]][vertices[j]]
+                subgraph_matrix[i, j] = self.matrix[int(vertices[i]), int(vertices[j])]
         return subgraph_matrix
     
-    def is_cut_vertex(self, vertex):
+    def is_cut_vertex(self, vertex: int) -> bool:
         '''
+        args:
+            current_cds: CDS中顶点的索引
+            induced_cds: 以这个CDS作为导出子图，
+        
         判断一个点是否是割点
         '''
-        current_cds = [self.state[0, :] == 2].nonzero()
+        # current_cds = [self.state[0, :] == 2].nonzero()
+        current_cds = [i for i, val in enumerate(self.state[0, :]) if val == 2]
         induced_cds = self.get_subgraph(current_cds)
         
         n = len(induced_cds)
+        
+        # 获取vertex在导出子图中的idx
+        new_idx = current_cds.index(vertex)
     
         # 创建一个邻接矩阵副本，并删除指定的顶点
-        submatrix = np.delete(induced_cds, vertex, axis=0)
-        submatrix = np.delete(submatrix, vertex, axis=1)
+        submatrix = np.delete(induced_cds, new_idx, axis=0)
+        submatrix = np.delete(submatrix, new_idx, axis=1)
         
         # 创建一个已访问顶点的数组
         visited = [False] * (n - 1)
@@ -852,8 +870,8 @@ class VertexSystemUnbiased(VertexSystemBase):
     def calculate_cds(self, vertices=None):
         '''
         reset时vertices=state[0]
-        在计算CDS之前，如果是BINARY，取值0和1，要把取值变成-1和1再计算
-        返回CDS值
+        在计算CUT之前，如果是BINARY，取值0和1，要把取值变成-1和1再计算
+        返回CUT值
         '''
         if vertices is None:
             vertices = self._get_vertices() # basis=None
@@ -895,10 +913,22 @@ class VertexSystemUnbiased(VertexSystemBase):
         # return -2 * new_vertices[action] * matmul(new_vertices.T, matrix[:, action])
         return -2 * new_vertices[action] * (new_vertices.T @ matrix[:, action])
 
+    # @staticmethod
+    # @jit(float64(float64[:], float64[:,:], int64), nopython=True, nogil=True)
+    # def _calculate_energy_change(new_vertices, matrix, action):
+    #     # Convert arrays to contiguous layout
+    #     new_vertices_contig = np.ascontiguousarray(new_vertices, requirements='C')
+    #     matrix_contig = np.ascontiguousarray(matrix, requirements='C')
+
+    #     # Perform the calculation
+    #     return -2 * new_vertices_contig[action] * (new_vertices_contig.T @ matrix_contig[:, action])
+    
     @staticmethod
     @jit(float64(float64[:],float64[:,:],int64), nopython=True)
     def _calculate_cds_change(new_vertices, matrix, action):
         '''
+        args:
+            new_vertices: 这个值传进来的是state[0,:]，不是new_state[0,:]
         计算选择了action这个顶点后CDS的变化
         matrix[:, action]是与这个顶点相关的点的连接情况
         返回CDS变化的值
@@ -911,8 +941,8 @@ class VertexSystemUnbiased(VertexSystemBase):
         # return 1
         '''
         action是一个顶点的索引，其顶点的取值是1或者2
-        值为2的顶点选择后变成0
-        值为1的顶点选择后变成2
+            1）值为2的顶点选择后变成0，CDS减少1
+            2）值为1的顶点选择后变成2，CDS变大1
         '''
         return 1 if new_vertices[action] == 1 else -1
 
@@ -944,7 +974,7 @@ class VertexSystemUnbiased(VertexSystemBase):
 
     @staticmethod
     @jit(float64[:](float64[:],float64[:,:]), nopython=True)
-    def _get_immeditate_cds_avaialable_jit(vertices, matrix):
+    def _get_immeditate_cds_avaialable_jit(self, vertices, matrix):
         '''
         假设vertex加入了S标为1，否则为-1
         matmul(matrix, vertices)得到一个列向量，其中每一个元素表示该顶点有几个邻居在S中
@@ -978,72 +1008,72 @@ class VertexSystemUnbiased(VertexSystemBase):
             elif val == 1:
                 rew[idx] = 1
             elif val == 2:
-                rew[idx] = -10000 if super.is_cut_vertex(idx) else -1
+                rew[idx] = -10000 if self.is_cut_vertex(idx) else -1
         return rew.astype('float64')
 
-class VertexSystemBiased(VertexSystemBase):
+# class VertexSystemBiased(VertexSystemBase):
 
-    def calculate_energy(self, vertices=None):
-        if type(vertices) == type(None):
-            vertices = self._get_vertices()
+#     def calculate_energy(self, vertices=None):
+#         if type(vertices) == type(None):
+#             vertices = self._get_vertices()
 
-        vertices = vertices.astype('float64')
-        matrix = self.matrix.astype('float64')
-        bias = self.bias.astype('float64')
+#         vertices = vertices.astype('float64')
+#         matrix = self.matrix.astype('float64')
+#         bias = self.bias.astype('float64')
 
-        return self._calculate_energy_jit(vertices, matrix, bias)
+#         return self._calculate_energy_jit(vertices, matrix, bias)
 
-    def calculate_cds(self, vertices=None):
-        raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")
+#     def calculate_cds(self, vertices=None):
+#         raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")
 
-    def get_best_cds(self):
-        raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")
+#     def get_best_cds(self):
+#         raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")
 
-    def _calc_over_range(self, i0, iMax):
-        list_vertices = [2 * np.array([int(x) for x in list_string]) - 1
-                      for list_string in
-                      [list(np.binary_repr(i, width=self.n_vertices))
-                       for i in range(int(i0), int(iMax))]]
-        matrix = self.matrix.astype('float64')
-        bias = self.bias.astype('float64')
-        return self.__calc_over_range_jit(list_vertices, matrix, bias)
+#     def _calc_over_range(self, i0, iMax):
+#         list_vertices = [2 * np.array([int(x) for x in list_string]) - 1
+#                       for list_string in
+#                       [list(np.binary_repr(i, width=self.n_vertices))
+#                        for i in range(int(i0), int(iMax))]]
+#         matrix = self.matrix.astype('float64')
+#         bias = self.bias.astype('float64')
+#         return self.__calc_over_range_jit(list_vertices, matrix, bias)
 
-    @staticmethod
-    @jit(nopython=True)
-    def _calculate_energy_change(new_vertices, matrix, bias, action):
-        return 2 * new_vertices[action] * (matmul(new_vertices.T, matrix[:, action]) + bias[action])
+#     @staticmethod
+#     @jit(nopython=True)
+#     def _calculate_energy_change(new_vertices, matrix, bias, action):
+#         return 2 * new_vertices[action] * (matmul(new_vertices.T, matrix[:, action]) + bias[action])
 
-    @staticmethod
-    @jit(nopython=True)
-    def _calculate_cds_change(new_vertices, matrix, bias, action):
-        raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")
+#     @staticmethod
+#     @jit(nopython=True)
+#     def _calculate_cds_change(new_vertices, matrix, bias, action):
+#         raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")
 
-    @staticmethod
-    @jit(nopython=True)
-    def _calculate_energy_jit(vertices, matrix, bias):
-        return matmul(vertices.T, matmul(matrix, vertices))/2 + matmul(vertices.T, bias)
+#     @staticmethod
+#     @jit(nopython=True)
+#     def _calculate_energy_jit(vertices, matrix, bias):
+#         return matmul(vertices.T, matmul(matrix, vertices))/2 + matmul(vertices.T, bias)
 
-    @staticmethod
-    @jit(parallel=True)
-    def __calc_over_range_jit(list_vertices, matrix, bias):
-        energy = 1e50
-        best_vertices = None
+#     @staticmethod
+#     @jit(parallel=True)
+#     def __calc_over_range_jit(list_vertices, matrix, bias):
+#         energy = 1e50
+#         best_vertices = None
 
-        for vertices in list_vertices:
-            vertices = vertices.astype('float64')
-            # This is self._calculate_energy_jit without calling to the class or self so jit can do its thing.
-            current_energy = -( matmul(vertices.T, matmul(matrix, vertices))/2 + matmul(vertices.T, bias))
-            if current_energy < energy:
-                energy = current_energy
-                best_vertices = vertices
-        return energy, best_vertices
+#         for vertices in list_vertices:
+#             vertices = vertices.astype('float64')
+#             # This is self._calculate_energy_jit without calling to the class or self so jit can do its thing.
+#             current_energy = -( matmul(vertices.T, matmul(matrix, vertices))/2 + matmul(vertices.T, bias))
+#             if current_energy < energy:
+#                 energy = current_energy
+#                 best_vertices = vertices
+#         return energy, best_vertices
 
-    @staticmethod
-    @jit(nopython=True)
-    def _get_immeditate_energies_avaialable_jit(vertices, matrix, bias):
-        return - (2 * vertices * (matmul(matrix, vertices) + bias))
+#     @staticmethod
+#     @jit(nopython=True)
+#     def _get_immeditate_energies_avaialable_jit(vertices, matrix, bias):
+#         return - (2 * vertices * (matmul(matrix, vertices) + bias))
 
-    @staticmethod
-    @jit(nopython=True)
-    def _get_immeditate_cds_avaialable_jit(vertices, matrix, bias):
-        raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")
+#     @staticmethod
+#     @jit(nopython=True)
+#     def _get_immeditate_cds_avaialable_jit(vertices, matrix, bias):
+#         raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")

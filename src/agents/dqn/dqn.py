@@ -80,7 +80,7 @@ class DQN:
     """
     def __init__(
         self,
-        envs,
+        envs, # VertexSystemUnbiased
         network,
 
         # Initial network parameters.
@@ -488,8 +488,12 @@ class DQN:
 
         return loss.item()
 
-    def act(self, state, is_training_ready=True):
+    def act(self, state: np.ndarray, is_training_ready=True) -> int:
         '''
+        args:
+            state: 表示vertices的状态，大小是(7+n, n)
+            is_training_ready: True表示buffer里有足够的经验可以开始训练
+            
         这里采用了epsilon贪心
         150000time_step后epsilon才为0.05，之前epsilon从1逐渐减小到0.05
         所以其实刚开始训练的时候基本都是随机选一个点，后面才是epsilon贪心
@@ -514,22 +518,31 @@ class DQN:
         else:
             if self.acting_in_reversible_vertex_env: # 我们这里是True
                 # Random random vertex.
-                action = np.random.randint(0, self.env.action_space.n)
+                # action = np.random.randint(0, self.env.action_space.n)
                 '''
                 不能真的随机选择一个顶点，要保证选择的点不会破坏连通性
-                1）值为0的顶点不能选，该点加入CDS后一定不连通
-                2）值为2但是为割点的顶点不能选，该点移出CDS后可能会破坏连通性
+                    1）值为0的顶点不能选，该点加入CDS后一定不连通
+                    2）值为2但是为割点的顶点不能选，该点移出CDS后可能会破坏连通性
+                能选择的顶点
+                    1）值为1的顶点
+                    2）值为2且不为割点的顶点
+                从所有能选择的顶点之中随机选择一个顶点
                 这里的state形状是(7+n, n)
                 state[0, :]是一个长度为n的向量，代表了每个顶点的标记
                 state[7:, :]是一个7xn的矩阵，代表了图的邻接矩阵
                 '''
-                x = mask = [state[0, :] != 0].nonzero()
+                # nonzero()函数用于获取数组中非零元素的索引
+                # x = mask = [state[0, :] != 0].nonzero()
+                mask = [i for i, val in enumerate(state) if val != 0]
+                x = mask[:]
                 # current_cds = [state[0, :] == 2].nonzero()
                 # induced_cds = self.env.get_subgraph(current_cds)
                 for idx in mask:
                     if state[0, idx] == 2 and self.env.is_cut_vertex(idx):
-                        x = x[x != idx]
-                action = x[np.random.randint(0, len(x))].item()
+                        # x = x[x != idx]
+                        x.remove(idx)
+                # action = x[np.random.randint(0, len(x))].item()
+                action = random.choice(x)
                 
                 
             else:
