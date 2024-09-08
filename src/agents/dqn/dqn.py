@@ -369,7 +369,7 @@ class DQN:
                 test_score = self.evaluate_agent()
                 print('\nTest score: {}\n'.format(np.round(test_score,3)))
 
-                if self.test_metric in [TestMetric.FINAL_CDS,TestMetric.MAX_CDS,TestMetric.CUMULATIVE_REWARD]:
+                if self.test_metric in [TestMetric.FINAL_CDS,TestMetric.MIN_CDS,TestMetric.CUMULATIVE_REWARD]:
                     best_network = all([test_score > score for t,score in test_scores])
                 elif self.test_metric in [TestMetric.ENERGY_ERROR, TestMetric.BEST_ENERGY]:
                     best_network = all([test_score < score for t, score in test_scores])
@@ -643,6 +643,7 @@ class DQN:
         Evaluates agent's current performance.  Run multiple evaluations at once
         so the network predictions can be done in batches.
         返回测试的平均分数
+        这个平均分数的含义是什么呢？
         '''
         if batch_size is None: # None
             batch_size = self.minibatch_size
@@ -687,7 +688,7 @@ class DQN:
                             batch_scores[i] = env.best_energy
                         elif self.test_metric == TestMetric.ENERGY_ERROR:
                             batch_scores[i] = abs(env.best_energy - env.calculate_best()[0])
-                        elif self.test_metric == TestMetric.MAX_CDS:
+                        elif self.test_metric == TestMetric.MIN_CDS:
                             batch_scores[i] = env.get_best_cds()
                         elif self.test_metric == TestMetric.FINAL_CDS:
                             batch_scores[i] = env.calculate_cds()

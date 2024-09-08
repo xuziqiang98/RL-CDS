@@ -685,6 +685,9 @@ class VertexSystemBase(ABC):
             immediate_reward_function = lambda *args: -1*self._get_immeditate_energies_avaialable_jit(*args)
         elif self.optimisation_target==OptimisationTarget.CDS:
             # 如果vertices是全1的，matrix @ vertices得到一个列向量，每个元素是matrix的一行之和
+            '''
+            CDS中的割点和CDS是否控制了整个图在这里计算好
+            '''
             immediate_reward_function = self._get_immeditate_cds_avaialable_jit
         else:
             raise NotImplementedError("Optimisation target {} not recognised.".format(self.optimisation_ta))
@@ -988,6 +991,11 @@ class VertexSystemUnbiased(VertexSystemBase):
     def _get_immeditate_energies_avaialable_jit(vertices, matrix):
         return 2 * vertices * matmul(matrix, vertices)
 
+    '''
+    静态方法不接受self，只进行计算
+    那判断割点和是否控制的逻辑应该放在外面进行
+    '''
+    
     @staticmethod
     @jit(float64[:](float64[:],float64[:,:]), nopython=True)
     def _get_immeditate_cds_avaialable_jit(vertices, matrix):
@@ -1016,6 +1024,7 @@ class VertexSystemUnbiased(VertexSystemBase):
         值为0的顶点：不应该选，给一个较大的负值
         值为1的顶点：选择后加入控制集
         值为2的顶点：如果是割点不应该选，否则选择后移出控制集
+        在CDS没有控制整个图，即state[0,:]中还有为0的顶点时，选1的奖励应该要更大一点
         '''
         rew = np.zeros(len(vertices))
         for idx, val in enumerate(vertices):

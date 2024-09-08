@@ -23,7 +23,7 @@ except ImportError:
 
 import time
 
-def run(save_loc="BA_20vertex/eco"):
+def run(timestep, save_loc="checkpoints/BA_20vertices"):
 
     print("\n----- Running {} -----\n".format(os.path.basename(__file__))) # 获取当前文件名
 
@@ -117,7 +117,8 @@ def run(save_loc="BA_20vertex/eco"):
 
     # 总回合数
     # nb_steps = 2500000
-    nb_steps = 10000
+    # nb_steps = 10000
+    nb_steps = timestep
 
     network_fn = lambda: MPNN(n_obs_in=train_envs[0].observation_space.shape[1], # 状态个数
                               n_layers=3,
@@ -173,7 +174,7 @@ def run(save_loc="BA_20vertex/eco"):
                 test_episodes=n_tests, # 这里是50
                 test_frequency=10000,  # 每一万次才输出一个Test score
                 test_save_path=test_save_path,
-                test_metric=TestMetric.MAX_CDS,
+                test_metric=TestMetric.MIN_CDS,
 
                 seed=None
                 )
@@ -206,10 +207,10 @@ def run(save_loc="BA_20vertex/eco"):
       plt.ylabel("Best Energy")
     elif agent.test_metric==TestMetric.CUMULATIVE_REWARD:
       plt.ylabel("Cumulative Reward")
-    elif agent.test_metric==TestMetric.MAX_CDS:
-      plt.ylabel("Max Cut")
+    elif agent.test_metric==TestMetric.MIN_CDS:
+      plt.ylabel("MIN CDS")
     elif agent.test_metric==TestMetric.FINAL_CDS:
-      plt.ylabel("Final Cut")
+      plt.ylabel("Final CDS")
 
     plt.savefig(fig_fname + ".png", bbox_inches='tight')
     plt.savefig(fig_fname + ".pdf", bbox_inches='tight')

@@ -17,7 +17,7 @@ class TestMetric(Enum):
     CUMULATIVE_REWARD = 1
     BEST_ENERGY = 2
     ENERGY_ERROR = 3
-    MAX_CDS = 4
+    MIN_CDS = 4
     FINAL_CDS = 5
 
 def set_global_seed(seed, env):
