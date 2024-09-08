@@ -127,14 +127,14 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
                                   **env_args)
 
         print("Running greedy solver with +1 initialisation of vertices...", end="...")
-        # Calculate the greedy cut with all vertices initialised to +1
+        # Calculate the greedy cds with all vertices initialised to +1
         greedy_env = deepcopy(test_env)
         greedy_env.reset(vertices=np.array([1] * test_graph.shape[0]))
 
         greedy_agent = Greedy(greedy_env)
         greedy_agent.solve()
 
-        greedy_single_cut = greedy_env.get_best_cut()
+        greedy_single_cds = greedy_env.get_best_cds()
         greedy_single_vertices = greedy_env.best_vertices
 
         print("done.")
@@ -144,11 +144,11 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
             rewards_history = []
             scores_history = []
 
-        best_cuts = []
+        best_cds = []
         init_vertices = []
         best_vertices = []
 
-        greedy_cuts = []
+        greedy_cds = []
         greedy_vertices = []
 
         while i_comp < n_attempts:
@@ -166,12 +166,12 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
                 scores_history_batch = []
 
             test_envs = [None] * batch_size
-            best_cuts_batch = [-1e3] * batch_size
+            best_cds_batch = [-1e3] * batch_size
             init_vertices_batch = [[] for _ in range(batch_size)]
             best_vertices_batch = [[] for _ in range(batch_size)]
 
             greedy_envs = [None] * batch_size
-            greedy_cuts_batch = []
+            greedy_cds_batch = []
             greedy_vertices_batch = []
 
             obs_batch = [None] * batch_size
@@ -189,7 +189,7 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
 
             print("done.")
 
-            # Calculate the max cut acting w.r.t. the network
+            # Calculate the max cds acting w.r.t. the network
             t_start = time.time()
 
             # pool = mp.Pool(processes=16)
@@ -222,7 +222,7 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
                         if not done:
                             obs_batch.append(obs)
                         else:
-                            best_cuts_batch[i] = env.get_best_cut()
+                            best_cds_batch[i] = env.get_best_cds()
                             best_vertices_batch[i] = env.best_vertices
                             i_comp_batch += 1
                             i_comp += 1
@@ -249,8 +249,8 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
 
                 for env in greedy_envs:
                     Greedy(env).solve()
-                    cut = env.get_best_cut()
-                    greedy_cuts_batch.append(cut)
+                    cds = env.get_best_cds()
+                    greedy_cds_batch.append(cds)
                     greedy_vertices_batch.append(env.best_vertices)
 
                 print("done.")
@@ -260,63 +260,63 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
                 rewards_history += rewards_history_batch
                 scores_history += scores_history_batch
 
-            best_cuts += best_cuts_batch
+            best_cds += best_cds_batch
             init_vertices += init_vertices_batch
             best_vertices += best_vertices_batch
 
             if env_args["reversible_vertices"]:
-                greedy_cuts += greedy_cuts_batch
+                greedy_cds += greedy_cds_batch
                 greedy_vertices += greedy_vertices_batch
 
 
             # print("\tGraph {}, par. steps: {}, comp: {}/{}".format(j, k, i_comp, batch_size),
             #       end="\r" if n_vertices<100 else "")
 
-        i_best = np.argmax(best_cuts)
-        best_cut = best_cuts[i_best]
+        i_best = np.argmax(best_cds)
+        best_cds = best_cds[i_best]
         sol = best_vertices[i_best]
 
-        mean_cut = np.mean(best_cuts)
+        mean_cds = np.mean(best_cds)
 
         if env_args["reversible_vertices"]:
-            idx_best_greedy = np.argmax(greedy_cuts)
-            greedy_random_cut = greedy_cuts[idx_best_greedy]
+            idx_best_greedy = np.argmax(greedy_cds)
+            greedy_random_cds = greedy_cds[idx_best_greedy]
             greedy_random_vertices = greedy_vertices[idx_best_greedy]
-            greedy_random_mean_cut = np.mean(greedy_cuts)
+            greedy_random_mean_cds = np.mean(greedy_cds)
         else:
-            greedy_random_cut = greedy_single_cut
+            greedy_random_cds = greedy_single_cds
             greedy_random_vertices = greedy_single_vertices
-            greedy_random_mean_cut = greedy_single_cut
+            greedy_random_mean_cds = greedy_single_cds
 
-        print('Graph {}, best(mean) cut: {}({}), greedy cut (rand init / +1 init) : {} / {}.  ({} attempts in {}s)\t\t\t'.format(
-            j, best_cut, mean_cut, greedy_random_cut, greedy_single_cut, n_attempts, np.round(t_total,2)))
+        print('Graph {}, best(mean) cds: {}({}), greedy cds (rand init / +1 init) : {} / {}.  ({} attempts in {}s)\t\t\t'.format(
+            j, best_cds, mean_cds, greedy_random_cds, greedy_single_cds, n_attempts, np.round(t_total,2)))
 
-        results.append([best_cut, sol,
-                        mean_cut,
-                        greedy_single_cut, greedy_single_vertices,
-                        greedy_random_cut, greedy_random_vertices,
-                        greedy_random_mean_cut,
+        results.append([best_cds, sol,
+                        mean_cds,
+                        greedy_single_cds, greedy_single_vertices,
+                        greedy_random_cds, greedy_random_vertices,
+                        greedy_random_mean_cds,
                         t_total/(n_attempts)])
 
         results_raw.append([init_vertices,
-                            best_cuts, best_vertices,
-                            greedy_cuts, greedy_vertices])
+                            best_cds, best_vertices,
+                            greedy_cds, greedy_vertices])
 
         if return_history:
             history.append([np.array(actions_history).T.tolist(),
                             np.array(scores_history).T.tolist(),
                             np.array(rewards_history).T.tolist()])
 
-    results = pd.DataFrame(data=results, columns=["cut", "sol",
-                                                  "mean cut",
-                                                  "greedy (+1 init) cut", "greedy (+1 init) sol",
-                                                  "greedy (rand init) cut", "greedy (rand init) sol",
-                                                  "greedy (rand init) mean cut",
+    results = pd.DataFrame(data=results, columns=["cds", "sol",
+                                                  "mean cds",
+                                                  "greedy (+1 init) cds", "greedy (+1 init) sol",
+                                                  "greedy (rand init) cds", "greedy (rand init) sol",
+                                                  "greedy (rand init) mean cds",
                                                   "time"])
 
     results_raw = pd.DataFrame(data=results_raw, columns=["init vertices",
-                                                          "cuts", "sols",
-                                                          "greedy cuts", "greedy sols"])
+                                                          "cds", "sols",
+                                                          "greedy cds", "greedy sols"])
 
     if return_history:
         history = pd.DataFrame(data=history, columns=["actions", "scores", "rewards"])
@@ -345,13 +345,13 @@ def __test_network_sequential(network, env_args, graphs_test, step_factor=1,
 
         n_steps = int(test_graph.shape[0] * step_factor)
 
-        best_cut = -1e3
+        best_cds = -1e3
         best_vertices = []
 
-        greedy_random_cut = -1e3
+        greedy_random_cds = -1e3
         greedy_random_vertices = []
 
-        greedy_single_cut = -1e3
+        greedy_single_cds = -1e3
         greedy_single_vertices = []
 
         times = []
@@ -361,7 +361,7 @@ def __test_network_sequential(network, env_args, graphs_test, step_factor=1,
                                   n_steps,
                                   **env_args)
         net_agent = Network(network, test_env,
-                            record_cut=False, record_rewards=False, record_qs=False)
+                            record_cds=False, record_rewards=False, record_qs=False)
 
         greedy_env = deepcopy(test_env)
         greedy_env.reset(vertices=np.array([1] * test_graph.shape[0]))
@@ -369,7 +369,7 @@ def __test_network_sequential(network, env_args, graphs_test, step_factor=1,
 
         greedy_agent.solve()
 
-        greedy_single_cut = greedy_env.get_best_cut()
+        greedy_single_cds = greedy_env.get_best_cds()
         greedy_single_vertices = greedy_env.best_vertices
 
         for k in range(n_attempts):
@@ -382,33 +382,33 @@ def __test_network_sequential(network, env_args, graphs_test, step_factor=1,
             net_agent.solve()
             times.append(time.time() - tstart)
 
-            cut = test_env.get_best_cut()
-            if cut > best_cut:
-                best_cut = cut
+            cds = test_env.get_best_cds()
+            if cds > best_cds:
+                best_cds = cds
                 best_vertices = test_env.best_vertices
 
             greedy_agent.solve()
 
-            greedy_cut = greedy_env.get_best_cut()
-            if greedy_cut > greedy_random_cut:
-                greedy_random_cut = greedy_cut
+            greedy_cds = greedy_env.get_best_cds()
+            if greedy_cds > greedy_random_cds:
+                greedy_random_cds = greedy_cds
                 greedy_random_vertices = greedy_env.best_vertices
 
-            # print('\nGraph {}, attempt : {}/{}, best cut : {}, greedy cut (rand init / +1 init) : {} / {}\t\t\t'.format(
-            #     i + 1, k, n_attemps, best_cut, greedy_random_cut, greedy_single_cut),
+            # print('\nGraph {}, attempt : {}/{}, best cds : {}, greedy cds (rand init / +1 init) : {} / {}\t\t\t'.format(
+            #     i + 1, k, n_attemps, best_cds, greedy_random_cds, greedy_single_cds),
             #     end="\r")
-            print('\nGraph {}, attempt : {}/{}, best cut : {}, greedy cut (rand init / +1 init) : {} / {}\t\t\t'.format(
-                i + 1, k, n_attempts, best_cut, greedy_random_cut, greedy_single_cut),
+            print('\nGraph {}, attempt : {}/{}, best cds : {}, greedy cds (rand init / +1 init) : {} / {}\t\t\t'.format(
+                i + 1, k, n_attempts, best_cds, greedy_random_cds, greedy_single_cds),
                 end=".")
 
-        results.append([best_cut, best_vertices,
-                        greedy_single_cut, greedy_single_vertices,
-                        greedy_random_cut, greedy_random_vertices,
+        results.append([best_cds, best_vertices,
+                        greedy_single_cds, greedy_single_vertices,
+                        greedy_random_cds, greedy_random_vertices,
                         np.mean(times)])
 
-    return pd.DataFrame(data=results, columns=["cut", "sol",
-                                               "greedy (+1 init) cut", "greedy (+1 init) sol",
-                                               "greedy (rand init) cut", "greedy (rand init) sol",
+    return pd.DataFrame(data=results, columns=["cds", "sol",
+                                               "greedy (+1 init) cds", "greedy (+1 init) sol",
+                                               "greedy (rand init) cds", "greedy (rand init) sol",
                                                "time"])
 
 ####################################################
