@@ -6,6 +6,7 @@ import networkx as nx
 import matplotlib.pyplot as plt
 
 import random
+import torch
 
 graph = [[0, 1, 0, 0, 0, 0, 0, 0, 0],
          [1, 0, 1, 1, 1, 0, 0, 0, 0],
@@ -45,7 +46,9 @@ for idx in range(n):
     if matrix[random_vertex, idx] == 1:
         mask[idx] = 2
                         
-state = mask
+# state = np.copy(mask)
+state = torch.from_numpy(mask).float()
+# print(f'state的类型：{type(state)}')
                 
 for i in range(n):
     if mask[i] == 2:
@@ -57,6 +60,7 @@ for i in range(n):
 
 # state = np.array([2, 2, 1, 1, 1, 0, 0, 0, 0])
 # state = np.array([0, 0, 0, 1, 1, 2, 2, 2, 2])
+# state = torch.tensor([1, 2, 2, 2, 1, 2, 1, 0, 0], dtype=torch.float)
 
 print(f'初始化一个解集：{state}')
 
@@ -108,9 +112,15 @@ def is_cut_vertex(vertex):
     visited = [False] * (n - 1)
         
     # 找到第一个未被删除的顶点并进行DFS遍历
+    # for start in range(n - 1):
+    #     if not visited[start]:
+    #         break
     for start in range(n - 1):
-        if not visited[start]:
+        if any(submatrix[start, :]):
             break
+    else:
+        # 如果图为空（所有顶点都孤立），直接返回 False
+        return False
         
     def dfs(v):
         visited[v] = True
@@ -129,7 +139,8 @@ random_vertex_from_cds = random.choice(cds)
 print(f'顶点{random_vertex_from_cds}是否在CDS导出子图中是割点：{is_cut_vertex(random_vertex_from_cds)}')
 
 # act()函数
-mask = [i for i, val in enumerate(state) if val != 0]
+# mask = [i for i, val in enumerate(state) if val != 0]
+mask = torch.nonzero(state != 0).squeeze().tolist()
 x = mask[:]
 # x = mask = np.nonzero(state)
 
@@ -165,20 +176,22 @@ print(f"选择的action是顶点{action}")
 # mask = state
 
 if state[action] == 2:
-    mask = state.copy()
+    # mask = state.copy()
+    mask = state.clone().detach()
     mask[action] = 0
     for i in range(n):
         # 邻居i为1，检查其是否与赋为2的顶点相邻
         if matrix[action, i] == 1 and state[i] == 1:
             # 顶点i的所有邻居都没有加入CDS
-            if all(state[j] < 2 for j in range(n) if matrix[i,j] == 1):
+            if all(mask[j] < 2 for j in range(n) if matrix[i,j] == 1):
                 mask[i] = 0
     for i in range(n):
         if matrix[action, i] == 1 and mask[i] == 2:
             mask[action] = 1
     new_state = mask
 elif state[action] == 1:
-    mask = state.copy()
+    # mask = state.copy()
+    mask = state.clone().detach()
     mask[action] = 2
     for idx in range(n):
         if matrix[action, idx] == 1 and state[idx] == 0:
@@ -192,6 +205,8 @@ print(f'执行action之后的顶点状态：{new_state}')
 ############################
 # 计算CDS
 ############################
+
+new_state = new_state.numpy()
 
 cds_number = np.sum(new_state == 2)
 
