@@ -72,10 +72,16 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
 
     if env_args['reversible_vertices']:
         # If MDP is reversible, both actions are allowed.
+        # MDP是马尔可夫决策过程吗
         if env_args['vertex_basis'] == VertexBasis.BINARY:
             allowed_action_state = (0, 1)
         elif env_args['vertex_basis'] == VertexBasis.SIGNED:
             allowed_action_state = (1, -1)
+        elif env_args['vertex_basis'] == VertexBasis.TRINARY:
+            '''
+            这么写可能不一定对，暂时先这样
+            '''
+            allowed_action_state = (0, 1, 2)
     else:
         # If MDP is irreversible, only return the state of vertices that haven't been flipped.
         if env_args['vertex_basis'] == VertexBasis.BINARY:
@@ -89,6 +95,7 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
 
         if acting_in_reversible_vertex_env:
             if qs.dim() == 1:
+                # 拿到使得Q函数最大的action
                 actions = [qs.argmax().item()]
             else:
                 actions = qs.argmax(1, True).squeeze(1).cpu().numpy()
@@ -106,9 +113,9 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
     # NETWORK TESTING
 
     results = []
-    results_raw = []
+    results_raw = [] # 这个是存什么的
     if return_history:
-        history = []
+        history = [] # 这个呢
 
     n_attempts = n_attempts if env_args["reversible_vertices"] else 1
 
@@ -128,8 +135,15 @@ def __test_network_batched(network, env_args, graphs_test, device=None, step_fac
 
         print("Running greedy solver with +1 initialisation of vertices...", end="...")
         # Calculate the greedy cds with all vertices initialised to +1
-        greedy_env = deepcopy(test_env)
-        greedy_env.reset(vertices=np.array([1] * test_graph.shape[0]))
+        greedy_env = deepcopy(test_env) # 深拷贝，后面还要用到test_env
+        '''
+        这里给了一个n_vertices长度的全1向量
+        reset之后的state形状是(7, n)
+        指定了vertices state 全1，不是我们想要的
+        如果指定全0，那么cds就要从0开始增长，之前的处理是给一个初始解集
+        '''
+        # greedy_env.reset(vertices=np.array([1] * test_graph.shape[0]))
+        greedy_env.reset()
 
         greedy_agent = Greedy(greedy_env)
         greedy_agent.solve()

@@ -96,9 +96,14 @@ class Greedy(VertexSolver):
             done (bool): Whether the environment is in a terminal state after
                 the action is taken.
         """
-        rewards_avaialable = self.env.get_immeditate_rewards_avaialable()
+        rewards_avaialable = self.env.get_immeditate_rewards_avaialable() # 这个是近期奖励
 
         if self.env.reversible_vertices:
+            '''
+            这里直接就取了使得近期奖励最大的那个action，但是没有考虑到连通性
+            最好在get_immeditate_rewards_avaialable这里就考虑连通性
+            满足连通性的action才是有效的action，其他的action的奖励是个负数
+            '''
             action = rewards_avaialable.argmax()
         else:
             masked_rewards_avaialable = rewards_avaialable.copy()
@@ -107,7 +112,10 @@ class Greedy(VertexSolver):
                        -100)
             action = masked_rewards_avaialable.argmax()
 
-        if rewards_avaialable[action] < 0:
+        '''
+        这里可以看出，一个训练好的模型，应该使得给出的当前最大的近期奖励的action在长期也是较优的
+        '''
+        if rewards_avaialable[action] < 0: # 没有能获得正奖励的action就结束
             action = None
             reward = 0
             done = True
@@ -174,6 +182,9 @@ class Network(VertexSolver):
         qs = self.network(self.current_observation)
 
         if self.env.reversible_vertices:
+            '''
+            这里也没有考虑到连通性
+            '''
             if np.random.uniform(0, 1) >= self.epsilon:
                 # Action that maximises Q function
                 action = qs.argmax().item()

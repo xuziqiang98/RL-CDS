@@ -16,13 +16,13 @@ from src.test import run as test_run
 @click.command()
 @click.option('--save_loc', default = PathConfig().checkpoints / 'BA_20vertices', help = 'Location to save the results')
 @click.option('--timestep', default = 10000, type = int, help = 'Number of timesteps to run the training for')
-@click.option('--test', default = False, type = bool, help = 'Whether to run the test')
+@click.option('--test', is_flag = True, help = 'Whether to run the test')
 def run(timestep, test, save_loc):
-    # train_run(timestep, save_loc)
-    # if test:
-    #     test_run(save_loc)
+    train_run(timestep, save_loc)
+    if test:
+        test_run(save_loc)
     
-    test_run(save_loc)
+    # test_run(save_loc)
     
 if __name__ == '__main__':
     run()

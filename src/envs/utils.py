@@ -165,7 +165,7 @@ class RandomErdosRenyiGraphGenerator(GraphGenerator):
 
 class RandomBarabasiAlbertGraphGenerator(GraphGenerator):
 
-    def __init__(self, n_vertices=20, m_insertion_edges=4, edge_type=EdgeType.DISCRETE):
+    def __init__(self, n_vertices=20, m_insertion_edges=4, edge_type=EdgeType.DISCRETE) -> np.ndarray:
         super().__init__(n_vertices, edge_type, False)
 
         self.m_insertion_edges = m_insertion_edges
@@ -194,7 +194,7 @@ class RandomBarabasiAlbertGraphGenerator(GraphGenerator):
         else:
             raise NotImplementedError()
 
-    def get(self, with_padding=False):
+    def get(self, with_padding=False) -> np.ndarray:
         '''
         返回BA图的邻接矩阵
         如果用mask对g进行处理，生成的图其实是更稀疏一些的
@@ -292,6 +292,10 @@ class RandomWattsStrogatzGraphGenerator(GraphGenerator):
 # Known graphs #
 ################
 class SingleGraphGenerator(GraphGenerator):
+    
+    '''
+    已经有了matrix，生成一个GraphGenerator对象
+    '''
 
     def __init__(self, matrix, bias=None):
 
