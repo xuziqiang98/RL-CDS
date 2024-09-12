@@ -191,7 +191,7 @@ class VertexSystemBase(ABC):
         if init_snap != None:
             self.load_snapshot(init_snap)
 
-    def reset(self, vertices=None):
+    def reset(self, vertices=None) -> np.ndarray:
         '''
         matrix是graph的邻接矩阵，ExtraAtion=None时没有其他操作
         max_local_reward_available是选择一个顶点后能立刻获得的最大的奖励
@@ -244,7 +244,7 @@ class VertexSystemBase(ABC):
 
         return self.get_observation()
 
-    def _reset_graph_observables(self):
+    def _reset_graph_observables(self) -> None:
         '''
         extra_action=NONE时matrix_obs就是matrix
         '''
@@ -264,8 +264,15 @@ class VertexSystemBase(ABC):
             else:
                 self.bias_obs = self.bias
 
-    def _reset_state(self, vertices=None):
+    def _reset_state(self, vertices=None) -> np.ndarray:
         '''
+        Args:
+            vertices (np.ndarray): A list of vertices to set the state to. If None, the state is initialised randomly.
+         
+        Returns:
+            state (np.ndarray): A 7xn matrix where n is the number of vertices. 
+                                The first row is the vertex state, the fifth row is the number of greedy actions available.
+         
         设S是V的一个子集
         x是顶点
         x在S中，x = 1，否则x = -1
@@ -651,7 +658,7 @@ class VertexSystemBase(ABC):
 
         return (self.get_observation(), rew, done, None)
 
-    def get_observation(self):
+    def get_observation(self) -> np.ndarray:
         '''
         前面设置state时顶点x的取值是-1或者1
         在这里会处理BINARY的情况，将取值变成0或者1

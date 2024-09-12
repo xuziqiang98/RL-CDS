@@ -13,7 +13,7 @@ from src.envs.utils import (SingleGraphGenerator,
                             EdgeType, SetGraphGenerator)
 from src.networks.mpnn import MPNN
 
-from src.configs.common_configs import OtherConfig
+from src.configs.common_configs import OtherConfig, PathConfig
 
 try:
     import seaborn as sns
@@ -24,7 +24,7 @@ except ImportError:
 def run(save_loc="checkpoints/BA_20vertices",
         # graph_save_loc="_graphs/validation/BA_20spin_m4_100graphs.pkl",
         batched=True,
-        max_batch_size=None):
+        max_batch_size=None) -> None:
 
     print("\n----- Running {} -----\n".format(os.path.basename(__file__)))
 
@@ -32,14 +32,20 @@ def run(save_loc="checkpoints/BA_20vertices",
     # NETWORK LOCATION
     ####################################################
 
-    data_folder = os.path.join(save_loc, 'data')
-    network_folder = os.path.join(save_loc, 'network')
+    # data_folder = os.path.join(save_loc, 'data')
+    # network_folder = os.path.join(save_loc, 'network')
+    
+    data_folder = save_loc / 'data'
+    network_folder = save_loc / 'network'
 
     print("data folder :", data_folder)
     print("network folder :", network_folder)
 
-    test_save_path = os.path.join(network_folder, 'test_scores.pkl')
-    network_save_path = os.path.join(network_folder, 'network_best.pth')
+    # test_save_path = os.path.join(network_folder, 'test_scores.pkl')
+    # network_save_path = os.path.join(network_folder, 'network_best.pth')
+    
+    test_save_path = network_folder / 'test_scores.pkl'
+    network_save_path = network_folder / 'network_best.pth'
 
     print("network params :", network_save_path)
 
@@ -59,7 +65,7 @@ def run(save_loc="checkpoints/BA_20vertices",
     # SET UP ENVIRONMENTAL AND VARIABLES
     ####################################################
 
-    gamma = 0.95
+    gamma = 0.95 # discount factor
     step_factor = 2
 
     env_args = {'observables': DEFAULT_OBSERVABLES,
@@ -71,7 +77,7 @@ def run(save_loc="checkpoints/BA_20vertices",
                 'memory_length': None,
                 'horizon_length': None,
                 'stag_punishment': None,
-                'basin_reward': 1. / 20,
+                'basin_reward': 1. / 20, # 这个奖励在什么情况下会被给出
                 'reversible_vertices': True}
 
     ####################################################
@@ -140,7 +146,8 @@ def run(save_loc="checkpoints/BA_20vertices",
     for res, fname, label in zip([results, results_raw, history],
                                  [results_fname, results_raw_fname, history_fname],
                                  ["results", "results_raw", "history"]):
-        save_path = os.path.join(data_folder, fname)
+        # save_path = os.path.join(data_folder, fname)
+        save_path = data_folder / fname
         res.to_pickle(save_path)
         print("{} saved to {}".format(label, save_path))
 
