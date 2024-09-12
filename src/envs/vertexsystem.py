@@ -48,11 +48,12 @@ class VertexSystemFactory(object):
             seed=None):
 
         if graph_generator.biased:
-            return VertexSystemBiased(graph_generator,max_steps,
-                                    observables,reward_signal,extra_action,optimisation_target,vertex_basis,
-                                    norm_rewards,memory_length,horizon_length,stag_punishment,basin_reward,
-                                    reversible_vertices,
-                                    init_snap,seed)
+            # return VertexSystemBiased(graph_generator,max_steps,
+            #                         observables,reward_signal,extra_action,optimisation_target,vertex_basis,
+            #                         norm_rewards,memory_length,horizon_length,stag_punishment,basin_reward,
+            #                         reversible_vertices,
+            #                         init_snap,seed)
+            raise NotImplementedError("Biased VertexSystem not yet implemented.")
         else:
             return VertexSystemUnbiased(graph_generator,max_steps,
                                       observables,reward_signal,extra_action,optimisation_target,vertex_basis,
@@ -875,6 +876,31 @@ class VertexSystemBase(ABC):
         
         # 如果有未访问的顶点，说明删除该顶点导致图不连通
         return not all(visited)
+    
+    def is_dominated(self, subset: list) -> bool:
+        '''
+        Args:
+            subset: 顶点子集的索引
+        
+        Attributes:
+            self.matrix (np.ndarray): 图的邻接矩阵
+            
+        Returns:
+            _: 是否被控制
+            
+        Function:
+            判断一个图的顶点集是否被其子集控制
+        
+        其实这里也不用这个麻烦，解集sol中没有0就是都被控制了
+        '''
+        n = self.matrix.shape[0]
+        
+        for idx in range(n):
+            if idx not in subset:
+                if all(self.matrix[idx][i] == 0 for i in subset):
+                    return False
+        
+        return True
         
 
 ##########
