@@ -15,13 +15,15 @@ from src.networks.mpnn import MPNN
 
 from src.configs.common_configs import OtherConfig, PathConfig
 
+from pathlib import Path
+
 try:
     import seaborn as sns
     plt.style.use('seaborn-v0_8')
 except ImportError:
     pass
 
-def run(save_loc="checkpoints/BA_20vertices",
+def run(n_vertices, step_factor, save_loc="checkpoints",
         # graph_save_loc="_graphs/validation/BA_20spin_m4_100graphs.pkl",
         batched=True,
         max_batch_size=None) -> None:
@@ -34,6 +36,8 @@ def run(save_loc="checkpoints/BA_20vertices",
 
     # data_folder = os.path.join(save_loc, 'data')
     # network_folder = os.path.join(save_loc, 'network')
+    if isinstance(save_loc, str):
+        save_loc = Path(save_loc)
     
     data_folder = save_loc / 'data'
     network_folder = save_loc / 'network'
@@ -66,7 +70,7 @@ def run(save_loc="checkpoints/BA_20vertices",
     ####################################################
 
     gamma = 0.95 # discount factor
-    step_factor = 2
+    step_factor = step_factor
 
     env_args = {'observables': DEFAULT_OBSERVABLES,
                 'reward_signal': RewardSignal.BLS,
@@ -77,7 +81,7 @@ def run(save_loc="checkpoints/BA_20vertices",
                 'memory_length': None,
                 'horizon_length': None,
                 'stag_punishment': None,
-                'basin_reward': 1. / 20, # 这个奖励在什么情况下会被给出
+                'basin_reward': 1. / n_vertices, # 这个奖励在什么情况下会被给出
                 'reversible_vertices': True}
 
     ####################################################
@@ -86,7 +90,7 @@ def run(save_loc="checkpoints/BA_20vertices",
 
     # 测试集里是100张图
     
-    n_vertices_test = 20
+    n_vertices_test = n_vertices
         
     # graphs_test = load_graph_set(graph_save_loc)
     
