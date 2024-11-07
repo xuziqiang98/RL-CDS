@@ -14,6 +14,7 @@ from src.envs.utils import (SetGraphGenerator,
                             OptimisationTarget, VertexBasis,
                             DEFAULT_OBSERVABLES)
 from src.networks.mpnn import MPNN
+from pathlib import Path
 
 try:
     import seaborn as sns
@@ -23,7 +24,7 @@ except ImportError:
 
 import time
 
-def run(timestep, save_loc="checkpoints/BA_20vertices"):
+def run(n_vertices, timestep, step_factor, save_loc="checkpoints"):
 
     print("\n----- Running {} -----\n".format(os.path.basename(__file__))) # 获取当前文件名
 
@@ -32,7 +33,9 @@ def run(timestep, save_loc="checkpoints/BA_20vertices"):
     ####################################################
 
     gamma=0.95 # 折扣因子
-    step_fact = 2 # step_fact * len(vertices)是一个回合episode的长度，这里是顶点个数的两倍
+    # step_fact = 2 # step_fact * len(vertices)是一个回合episode的长度，这里是顶点个数的两倍
+    
+    step_fact = step_factor
     '''
     由于现在设的点是不能重复选择的，那么控制数最大也不会超过n，这里的step_fact给的小一点
     更精确一点的话，\gamma_c(G) <= n - \Delta(G)，max_step应该设置的更精确一点
@@ -50,7 +53,7 @@ def run(timestep, save_loc="checkpoints/BA_20vertices"):
                 'memory_length':None,
                 'horizon_length':None,
                 'stag_punishment':None,
-                'basin_reward':1./20, # 中间奖励
+                'basin_reward':1./n_vertices, # 中间奖励
                 'reversible_vertices':True} # vertex可以反复被操作
                 # 'reversible_vertices':False}
 
@@ -58,7 +61,7 @@ def run(timestep, save_loc="checkpoints/BA_20vertices"):
     # SET UP TRAINING AND TEST GRAPHS
     ####################################################
 
-    n_vertices_train = 20
+    n_vertices_train = n_vertices
     # DISCRETE边的取值为-1, 0 ,1
     train_graph_generator = RandomBarabasiAlbertGraphGenerator(n_vertices=n_vertices_train,m_insertion_edges=4,edge_type=EdgeType.DISCRETE)
 
@@ -101,15 +104,23 @@ def run(timestep, save_loc="checkpoints/BA_20vertices"):
     # SET UP FOLDERS FOR SAVING DATA
     ####################################################
 
-    data_folder = os.path.join(save_loc,'data')
-    network_folder = os.path.join(save_loc, 'network')
+    if isinstance(save_loc, str):
+        save_loc = Path(save_loc)
+    
+    # data_folder = os.path.join(save_loc,'data')
+    # network_folder = os.path.join(save_loc, 'network')
+    data_folder = save_loc / 'data'
+    network_folder = save_loc / 'network'
 
     mk_dir(data_folder)
     mk_dir(network_folder)
     # print(data_folder)
-    network_save_path = os.path.join(network_folder,'network.pth')
-    test_save_path = os.path.join(network_folder,'test_scores.pkl')
-    loss_save_path = os.path.join(network_folder, 'losses.pkl')
+    # network_save_path = os.path.join(network_folder,'network.pth')
+    # test_save_path = os.path.join(network_folder,'test_scores.pkl')
+    # loss_save_path = os.path.join(network_folder, 'losses.pkl')
+    network_save_path = network_folder / 'network.pth'
+    test_save_path = network_folder / 'test_scores.pkl'
+    loss_save_path = network_folder / 'losses.pkl'
 
     ####################################################
     # SET UP AGENT
@@ -197,6 +208,7 @@ def run(timestep, save_loc="checkpoints/BA_20vertices"):
     data = np.array(data)
 
     fig_fname = os.path.join(network_folder,"training_curve")
+    # fig_fname = network_folder / "training_curve"
 
     plt.plot(data[:,0],data[:,1])
     plt.xlabel("Timestep")
@@ -224,6 +236,7 @@ def run(timestep, save_loc="checkpoints/BA_20vertices"):
     data = np.array(data)
 
     fig_fname = os.path.join(network_folder,"loss")
+    # fig_fname = network_folder / "loss"
 
     N=50
     data_x = np.convolve(data[:,0], np.ones((N,))/N, mode='valid')

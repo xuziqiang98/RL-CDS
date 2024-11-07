@@ -182,11 +182,17 @@ class VertexSystemBase(ABC):
 
         self.reset()
 
+        # score在这里就是cds
         self.score = self.calculate_score()
         if self.reward_signal == RewardSignal.SINGLE:
             self.init_score = self.score
 
-        self.best_score = self.score
+        # self.best_score = self.score
+        '''
+        只有当图被控制时best_score才会被更新
+        '''
+        # self.best_score = self.score if self.is_dominated(self.state[0,:]) else 0
+        self.best_score = self.n_vertices
         self.best_vertices = self.state[0,:]
 
         if init_snap != None:
@@ -213,22 +219,38 @@ class VertexSystemBase(ABC):
             self.matrix = self.gg.get() # 拿到graph的matrix
         self._reset_graph_observables() # 重置矩阵的状态，由于这里ExtraActin是NONE，其实什么操作也没做
 
-        verticesOne = np.array([1] * self.n_vertices) # 长为n个顶点的全1向量
-        local_rewards_available = self.get_immeditate_rewards_avaialable(verticesOne) # 返回一个向量
-        local_rewards_available = local_rewards_available[np.nonzero(local_rewards_available)] # 筛出非0值
-        if local_rewards_available.size == 0:
-            # We've generated an empty graph, this is pointless, try again.
-            self.reset()
-        else:
-            self.max_local_reward_available = np.max(local_rewards_available) # 返回局部能获得的最大的值
-
+        '''
+        verticesOne是一个全1向量，似乎是一个初始化的解
+        但是全1向量对CDS来说是不合法的
+        这里先生成self.state，这样第一行是一个初始解集
+        用初始化的解集计算局部能获得的最大的奖励
+        self.max_local_reward_available放到_reset_state中计算
+        '''
         self.state = self._reset_state(vertices) # 这里vertices=None，第0行和第5行的值都被更新了
+        
+        # verticesOne = np.array([1] * self.n_vertices) # 长为n个顶点的全1向量
+        # local_rewards_available = self.get_immeditate_rewards_avaialable(verticesOne) # 返回一个向量
+        
+        # local_rewards_available = self.get_immeditate_rewards_avaialable(self.state[0, :self.n_vertices]) # 返回一个向量
+        # local_rewards_available = local_rewards_available[np.nonzero(local_rewards_available)] # 筛出非0值
+        # if local_rewards_available.size == 0:
+        #     # We've generated an empty graph, this is pointless, try again.
+        #     self.reset()
+        # else:
+        #     self.max_local_reward_available = np.max(local_rewards_available) # 返回局部能获得的最大的值
+
+        # self.state = self._reset_state(vertices)
         self.score = self.calculate_score() # vertexe=None
 
         if self.reward_signal == RewardSignal.SINGLE:
             self.init_score = self.score
 
-        self.best_score = self.score
+        '''
+        best_score只有当图被控制时才会被更新
+        '''
+        # self.best_score = self.score
+        # self.best_score = self.score if self.is_dominated(self.state[0,:]) else 0
+        self.best_score = self.n_vertices
         self.best_obs_score = self.score
         self.best_vertices = self.state[0, :self.n_vertices].copy()
         self.best_obs_vertices = self.state[0, :self.n_vertices].copy()
@@ -306,24 +328,25 @@ class VertexSystemBase(ABC):
                 剩下的点取值设为0，表示这些点还没有被控制
                 self.matrix是图的邻接矩阵
                 '''
-                # 选择一个顶点设为2
-                mask = np.zeros(self.n_vertices)
-                random_vertex = np.random.randint(self.n_vertices)
-                mask[random_vertex] = 2
+                # # 选择一个顶点设为2
+                # mask = np.zeros(self.n_vertices)
+                # random_vertex = np.random.randint(self.n_vertices)
+                # mask[random_vertex] = 2
                 
-                # 将邻居都设为2，保证CDS中的顶点都是连通的
-                for idx in range(self.n_vertices):
-                    if self.matrix[random_vertex, idx] == 1:
-                        mask[idx] = 2
+                # # 将邻居都设为2，保证CDS中的顶点都是连通的
+                # for idx in range(self.n_vertices):
+                #     if self.matrix[random_vertex, idx] == 1:
+                #         mask[idx] = 2
                         
-                state[0, :self.n_vertices] = mask
+                # state[0, :self.n_vertices] = mask
                 
-                for i in range(self.n_vertices):
-                    if mask[i] == 2:
-                        # state[0, i] = 2
-                        for j in range(self.n_vertices):
-                            if self.matrix[i, j] == 1 and state[0, j] == 0:
-                                state[0, j] = 1
+                # for i in range(self.n_vertices):
+                #     if mask[i] == 2:
+                #         # state[0, i] = 2
+                #         for j in range(self.n_vertices):
+                #             if self.matrix[i, j] == 1 and state[0, j] == 0:
+                #                 state[0, j] = 1
+                state[0, :self.n_vertices] = self.init_sol()
             else: # 顶点不能重复选择
                 # For irreversible vertices, initialise all to +1 (i.e. allowed to be flipped).
                 state[0, :self.n_vertices] = 1
@@ -335,6 +358,18 @@ class VertexSystemBase(ABC):
             state[0, :] = self._format_vertices_to_signed(vertices) # 取值1或者-1
 
         state = state.astype('float')
+        
+        '''
+        IMMEDIATE_REWARD_AVAILABLE需要用到local_rewards_available，但是这个
+        需要用到初始化的解，所以移动到这里计算
+        '''
+        local_rewards_available = self.get_immeditate_rewards_avaialable(state[0, :self.n_vertices]) # 返回一个向量
+        local_rewards_available = local_rewards_available[np.nonzero(local_rewards_available)] # 筛出非0值
+        if local_rewards_available.size == 0:
+            # We've generated an empty graph, this is pointless, try again.
+            self.reset()
+        else:
+            self.max_local_reward_available = np.max(local_rewards_available) # 返回局部能获得的最大的值
 
         # If any observables other than "immediate energy available" require setting to values other than
         # 0 at this stage, we should use a 'for k,v in enumerate(self.observables)' loop.
@@ -490,39 +525,47 @@ class VertexSystemBase(ABC):
             3）选择的顶点是0
                 不应该出现这种情况，如果赋为0的点加入CDS，那么新的CDS一定不连通
             '''
-            if self.state[0, action] == 2:
-                mask = self.state[0, :self.n_vertices].copy()
-                # print(f'mask: {mask}')
-                mask[action] = 0
-                for i in range(self.n_vertices):
-                    # 邻居i为1，检查其是否与赋为2的顶点相邻
-                    if self.matrix[action, i] == 1 and self.state[0, i] == 1:
-                        # 顶点i的所有邻居都没有加入CDS
-                        if all(mask[j] < 2 for j in range(self.n_vertices) if self.matrix[i,j] == 1):
-                            mask[i] = 0
-                # 检查action这个顶点是否与2相连
-                for i in range(self.n_vertices):
-                    if self.matrix[action, i] == 1 and mask[i] == 2:
-                        mask[action] = 1
-                new_state[0, :self.n_vertices] = mask
-            elif self.state[0, action] == 1:
-                mask = self.state[0, :self.n_vertices].copy()
-                mask[action] = 2
-                for idx in range(self.n_vertices):
-                    if self.matrix[action, idx] == 1 and self.state[0, idx] == 0:
-                        mask[idx] = 1
-                new_state[0, :self.n_vertices] = mask
-            else:
-                # raise ValueError("The selected vertex should be 1 or 2")
-                '''
-                如果顶点都为0，随机选择一个点加入CDS中
-                '''
-                mask = self.state[0, :self.n_vertices].copy()
-                mask[action] = 2
-                for idx in range(self.n_vertices):
-                    if self.matrix[action, idx] == 1 and self.state[0, idx] == 0:
-                        mask[idx] = 1
-                new_state[0, :self.n_vertices] = mask
+            # if self.state[0, action] == 2:
+            #     mask = self.state[0, :self.n_vertices].copy()
+            #     # print(f'mask: {mask}')
+            #     mask[action] = 0
+            #     for i in range(self.n_vertices):
+            #         # 邻居i为1，检查其是否与赋为2的顶点相邻
+            #         if self.matrix[action, i] == 1 and self.state[0, i] == 1:
+            #             # 顶点i的所有邻居都没有加入CDS
+            #             if all(mask[j] < 2 for j in range(self.n_vertices) if self.matrix[i,j] == 1):
+            #                 mask[i] = 0
+            #     # 检查action这个顶点是否与2相连
+            #     for i in range(self.n_vertices):
+            #         if self.matrix[action, i] == 1 and mask[i] == 2:
+            #             mask[action] = 1
+            #     new_state[0, :self.n_vertices] = mask
+            # elif self.state[0, action] == 1:
+            #     mask = self.state[0, :self.n_vertices].copy()
+            #     mask[action] = 2
+            #     for idx in range(self.n_vertices):
+            #         if self.matrix[action, idx] == 1 and self.state[0, idx] == 0:
+            #             mask[idx] = 1
+            #     new_state[0, :self.n_vertices] = mask
+            # else:
+            #     if len(self.state[0, :self.n_vertices]) - np.count_nonzero(self.state[0, :self.n_vertices]) !=  len(self.state[0, :self.n_vertices]):
+            #         raise ValueError("The selected vertex should be 1 or 2")
+            #     '''
+            #     如果顶点都为0，随机选择一个点加入CDS中
+            #     这里是只选择一个点加入还是选择多个点加入更好呢
+            #     '''
+            #     mask = self.state[0, :self.n_vertices].copy()
+            #     mask[action] = 2
+            #     for idx in range(self.n_vertices):
+            #         if self.matrix[action, idx] == 1 and self.state[0, idx] == 0:
+            #             mask[idx] = 1
+            #     new_state[0, :self.n_vertices] = mask
+            
+            # if action == 0 and self.n_vertices - np.count_nonzero(self.state[0, :self.n_vertices]) !=  self.n_vertices:
+            #     raise ValueError("The selected vertex should be 1 or 2")
+            # else:
+            #     new_state[0, :self.n_vertices] = self.get_new_state(self.state[0, :self.n_vertices], action)
+            new_state[0, :self.n_vertices] = self.get_new_state(self.state[0, :self.n_vertices], action)
             
             if self.gg.biased:
                 delta_score = self._calculate_score_change(new_state[0,:self.n_vertices], self.matrix, self.bias, action)
@@ -579,10 +622,17 @@ class VertexSystemBase(ABC):
                     # ####TEMP####
                     rew += self.basin_reward # 陷入局部最优解时更新内部reward
 
-        if self.score > self.best_score:
+        # if self.score > self.best_score:
+        #     self.best_score = self.score
+        #     self.best_vertices = self.state[0, :self.n_vertices].copy()
+        
+        '''
+        只有图被控制时best_score才会被更新
+        '''
+        if self.is_dominated(self.state[0,:]) and self.score < self.best_score:
             self.best_score = self.score
             self.best_vertices = self.state[0, :self.n_vertices].copy()
-
+        
         if self.memory_length is not None: # 缓冲区长度有限
             # For case of finite memory length.
             self.score_memory[self.idx_memory] = self.score
@@ -682,8 +732,17 @@ class VertexSystemBase(ABC):
         else:
             return np.vstack((state, self.matrix_obs))
 
-    def get_immeditate_rewards_avaialable(self, vertices=None):
+    def get_immeditate_rewards_avaialable(self, vertices=None) -> np.ndarray:
         '''
+        Args:
+            vertices (np.ndarray): A list of vertices to calculate the immediate rewards available. 
+                                   If None, the current state is used.
+        
+        Attributes:
+            immediate_reward_function (function): A function that calculates the immediate reward available for a given vertex.
+        
+        这里获取的是即时奖励
+        
         返回一个向量，每一个元素的值表示选择第i个顶点后立刻得到的CDS
         '''
         if vertices is None:
@@ -695,19 +754,38 @@ class VertexSystemBase(ABC):
             # 如果vertices是全1的，matrix @ vertices得到一个列向量，每个元素是matrix的一行之和
             '''
             CDS中的割点和CDS是否控制了整个图在这里计算好
+            dominated_graph中1代表选择该点后CDS可以控制全图
             '''
+            dominated_graph = [0] * self.n_vertices
+            # 要计算选择每个点之后state变化的情况
+            # current_state = self.state[0, :self.n_vertices].copy()
+            current_state = vertices.copy()
+            for idx in range(self.n_vertices):
+                future_state = current_state.copy()
+                # 根据每个点不同的取值得到新的state
+                # 只有当state全为0时，才会选值为0的点
+                # if current_state[idx] == 0 and self.n_vertices - np.count_nonzero(current_state) !=  self.n_vertices:
+                #     raise ValueError("The selected vertex should be 1 or 2")
+                # else:
+                #     future_state = self.get_new_state(current_state, idx)
+                future_state = self.get_new_state(current_state, idx)
+                # 判断图是否被CDS控制
+                if np.count_nonzero(future_state) == self.n_vertices:
+                    dominated_graph[idx] = 1
+                
             immediate_reward_function = self._get_immeditate_cds_avaialable_jit
         else:
             raise NotImplementedError("Optimisation target {} not recognised.".format(self.optimisation_ta))
 
         vertices = vertices.astype('float64')
         matrix = self.matrix.astype('float64')
-
+        dominated_graph = np.array(dominated_graph).astype('float64')
+        
         if self.gg.biased:
             bias = self.bias.astype('float64')
-            return immediate_reward_function(vertices,matrix,bias)
+            return immediate_reward_function(vertices, matrix, dominated_graph, bias)
         else:
-            return immediate_reward_function(vertices,matrix)
+            return immediate_reward_function(vertices, matrix, dominated_graph)
 
     def get_allowed_action_states(self):
         '''
@@ -877,7 +955,7 @@ class VertexSystemBase(ABC):
         # 如果有未访问的顶点，说明删除该顶点导致图不连通
         return not all(visited)
     
-    def is_dominated(self, subset: list) -> bool:
+    def is_dominated(self, vertices: np.ndarray) -> bool:
         '''
         Args:
             subset: 顶点子集的索引
@@ -893,15 +971,89 @@ class VertexSystemBase(ABC):
         
         其实这里也不用这个麻烦，解集sol中没有0就是都被控制了
         '''
-        n = self.matrix.shape[0]
+        # n = self.matrix.shape[0]
         
-        for idx in range(n):
-            if idx not in subset:
-                if all(self.matrix[idx][i] == 0 for i in subset):
-                    return False
+        # for idx in range(n):
+        #     if idx not in subset:
+        #         if all(self.matrix[idx][i] == 0 for i in subset):
+        #             return False
         
-        return True
+        if np.count_nonzero(vertices) == self.n_vertices:
+            return True 
+        else:
+            return False
+    
+    def init_sol(self) -> np.ndarray:
+        '''
+        Attributes:
+            mask (np.ndarray): 辅助数组
+            
+        Returns:
+            sol: 初始解
+        '''
+        # 选择一个顶点设为2
+        mask = np.zeros(self.n_vertices)
+        random_vertex = np.random.randint(self.n_vertices)
+        mask[random_vertex] = 2
         
+        # 将邻居都设为2，保证CDS中的顶点都是连通的
+        for idx in range(self.n_vertices):
+            if self.matrix[random_vertex, idx] == 1:
+                mask[idx] = 2
+                
+        sol = mask
+        
+        for i in range(self.n_vertices):
+            if mask[i] == 2:
+                # state[0, i] = 2
+                for j in range(self.n_vertices):
+                    if self.matrix[i, j] == 1 and sol[j] == 0:
+                        sol[j] = 1
+        
+        return sol
+
+    def get_new_state(self, state: np.ndarray, action: int) -> np.ndarray:
+        '''
+        Args:
+            state: 当前状态
+            action: 选择的顶点
+        
+        Returns:
+            new_state: 新的状态
+        '''
+        new_state = state.copy()
+        
+        if state[action] == 2:
+            mask = state.copy()
+            mask[action] = 0
+            for i in range(self.n_vertices):
+                if self.matrix[action, i] == 1 and state[i] == 1:
+                    if all(mask[j] < 2 for j in range(self.n_vertices) if self.matrix[i, j] == 1):
+                        mask[i] = 0
+            for i in range(self.n_vertices):
+                if self.matrix[action, i] == 1 and mask[i] == 2:
+                    mask[action] = 1
+            new_state = mask
+        elif state[action] == 1:
+            mask = state.copy()
+            mask[action] = 2
+            for i in range(self.n_vertices):
+                if self.matrix[action, i] == 1 and state[i] == 0:
+                    mask[i] = 1
+            new_state = mask
+        else:
+            # 这里只负责处理结果，不负责检查输入
+            # if len(state) - np.count_nonzero(state) != len(state):
+            #     raise ValueError("The selected vertex should be 1 or 2")
+            mask = state.copy()
+            mask[action] = 2
+            for i in range(self.n_vertices):
+                if self.matrix[action, i] == 1 and state[i] == 0:
+                    mask[i] = 1
+            new_state = mask
+        
+        return new_state
+
 
 ##########
 # Classes for implementing the calculation methods with/without biases.
@@ -938,17 +1090,22 @@ class VertexSystemUnbiased(VertexSystemBase):
 
     def get_best_cds(self):
         if self.optimisation_target==OptimisationTarget.CDS:
+            '''
+            best_score就是最优的CDS值
+            而是当图被控制时，最小的score
+            图不被控制的话，best_cds应该是0
+            '''
             return self.best_score
         else:
             raise NotImplementedError("Can't return best cds when optimisation target is set to energy.")
 
-    def _calc_over_range(self, i0, iMax):
-        list_vertices = [2 * np.array([int(x) for x in list_string]) - 1
-                      for list_string in
-                      [list(np.binary_repr(i, width=self.n_vertices))
-                       for i in range(int(i0), int(iMax))]]
-        matrix = self.matrix.astype('float64')
-        return self.__calc_over_range_jit(list_vertices, matrix)
+    # def _calc_over_range(self, i0, iMax):
+    #     list_vertices = [2 * np.array([int(x) for x in list_string]) - 1
+    #                   for list_string in
+    #                   [list(np.binary_repr(i, width=self.n_vertices))
+    #                    for i in range(int(i0), int(iMax))]]
+    #     matrix = self.matrix.astype('float64')
+    #     return self.__calc_over_range_jit(list_vertices, matrix)
     
     '''
     数组是连续存储的话使用@运算符效率会更高
@@ -1030,8 +1187,8 @@ class VertexSystemUnbiased(VertexSystemBase):
     '''
     
     @staticmethod
-    @jit(float64[:](float64[:],float64[:,:]), nopython=True)
-    def _get_immeditate_cds_avaialable_jit(vertices, matrix):
+    @jit(float64[:](float64[:], float64[:,:], float64[:]), nopython=True)
+    def _get_immeditate_cds_avaialable_jit(vertices, matrix, dominated_graph) -> np.ndarray:
         '''
         假设vertex加入了S标为1，否则为-1
         matmul(matrix, vertices)得到一个列向量，其中每一个元素表示该顶点有几个邻居在S中
@@ -1062,12 +1219,16 @@ class VertexSystemUnbiased(VertexSystemBase):
         rew = np.zeros(len(vertices))
         for idx, val in enumerate(vertices):
             if val == 0:
-                rew[idx] = -10000
-            elif val == 1:
+                rew[idx] = -1000
+            elif val == 1 and dominated_graph[idx] == 0:
+                rew[idx] = 0.5
+            elif val == 1 and dominated_graph[idx] == 1:
                 rew[idx] = 1
-            elif val == 2:
+            elif val == 2 and dominated_graph[idx] == 0:
                 # rew[idx] = -10000 if is_cut_vertex(idx) else -1
-                rew[idx] = -1
+                rew[idx] = 0.2
+            elif val == 2 and dominated_graph[idx] == 1:
+                rew[idx] = -0.1
         return rew.astype('float64')
 
 # class VertexSystemBiased(VertexSystemBase):
@@ -1088,14 +1249,14 @@ class VertexSystemUnbiased(VertexSystemBase):
 #     def get_best_cds(self):
 #         raise NotImplementedError("MaxCut not defined/implemented for biased VertexSystems.")
 
-#     def _calc_over_range(self, i0, iMax):
-#         list_vertices = [2 * np.array([int(x) for x in list_string]) - 1
-#                       for list_string in
-#                       [list(np.binary_repr(i, width=self.n_vertices))
-#                        for i in range(int(i0), int(iMax))]]
-#         matrix = self.matrix.astype('float64')
-#         bias = self.bias.astype('float64')
-#         return self.__calc_over_range_jit(list_vertices, matrix, bias)
+    def _calc_over_range(self, i0, iMax):
+        list_vertices = [2 * np.array([int(x) for x in list_string]) - 1
+                      for list_string in
+                      [list(np.binary_repr(i, width=self.n_vertices))
+                       for i in range(int(i0), int(iMax))]]
+        matrix = self.matrix.astype('float64')
+        bias = self.bias.astype('float64')
+        return self.__calc_over_range_jit(list_vertices, matrix, bias)
 
 #     @staticmethod
 #     @jit(nopython=True)
